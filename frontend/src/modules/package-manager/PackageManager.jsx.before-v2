@@ -6,9 +6,6 @@ import {
     determineBestSource
 } from './packageUtils';
 
-import ManagerSelector from './components/ManagerSelector';
-import SoftwareInventory from './components/SoftwareInventory';
-
 const API = 'http://127.0.0.1:8000';
 
 function Packages({ managers }) {
@@ -341,15 +338,73 @@ function Packages({ managers }) {
     return (
         <div className="stack">
 
-                        <ManagerSelector
-                managers={managers}
-                selected={selected}
-                open={managersOpen}
-                onSelect={setSelected}
-                onToggleOpen={() =>
-                    setManagersOpen(!managersOpen)
-                }
-            />
+            <section className="panel">
+                <div
+                    className="panelhead collapsible-header"
+                    onClick={() => setManagersOpen(!managersOpen)}
+                >
+                    <div className="collapsible-title">
+                        <button
+                            className="collapse-button"
+                            onClick={e => {
+                                e.stopPropagation();
+                                setManagersOpen(!managersOpen);
+                            }}
+                        >
+                            {managersOpen ? '▼' : '▶'}
+                        </button>
+
+                        <div>
+                            <h3>Available package managers</h3>
+                            <p>
+                                Detection only. Nothing is installed,
+                                removed, or upgraded.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                {managersOpen && (
+                    <div className="managergrid">
+                        {managers.map(m => (
+                            <button
+                                className={
+                                    'manager ' +
+                                    (selected === m.id
+                                        ? 'selected'
+                                        : '')
+                                }
+                                key={m.id}
+                                onClick={() =>
+                                    setSelected(m.id)
+                                }
+                            >
+                                <div className="icon">
+                                    {m.name[0]}
+                                </div>
+
+                                <div className="mtext">
+                                    <b>{m.name}</b>
+                                    <span>
+                                        {m.description}
+                                    </span>
+                                </div>
+
+                                <em
+                                    className={
+                                        m.installed
+                                            ? 'good'
+                                            : ''
+                                    }
+                                >
+                                    {m.installed
+                                        ? 'AVAILABLE'
+                                        : 'MISSING'}
+                                </em>
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </section>
 
 
             <section className="panel">
@@ -1003,13 +1058,47 @@ function Packages({ managers }) {
             </section>
 
 
-                        <SoftwareInventory
-                inventory={inventory}
-                open={inventoryOpen}
-                onToggleOpen={() =>
-                    setInventoryOpen(!inventoryOpen)
-                }
-            />
+            <section className="panel">
+
+                <div
+                    className="panelhead collapsible-header"
+                    onClick={() => setInventoryOpen(!inventoryOpen)}
+                >
+                    <div className="collapsible-title">
+                        <button
+                            className="collapse-button"
+                            onClick={e => {
+                                e.stopPropagation();
+                                setInventoryOpen(!inventoryOpen);
+                            }}
+                        >
+                            {inventoryOpen ? '▼' : '▶'}
+                        </button>
+
+                        <div>
+                            <h3>Installed software</h3>
+
+                            <p>
+                                Read-only inventory from the
+                                available system source.
+                            </p>
+                        </div>
+                    </div>
+
+                    {inventory?.source && (
+                        <span className="source">
+                            SOURCE · {inventory.source}
+                        </span>
+                    )}
+                </div>
+
+                {inventoryOpen && (
+                    <pre>
+                        {inventory?.output ||
+                            'No supported inventory source is available.'}
+                    </pre>
+                )}
+            </section>
 
         </div>
     );
