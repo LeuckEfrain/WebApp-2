@@ -9,3 +9,4 @@ function Stat({ title, value, detail }) {
         </div>
     );
 }
+export default Stat;

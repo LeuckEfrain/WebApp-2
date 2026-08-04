@@ -1103,3 +1103,4 @@ function Packages({ managers }) {
         </div>
     );
 }
+export default Packages;

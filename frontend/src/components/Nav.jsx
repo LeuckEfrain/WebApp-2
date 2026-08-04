@@ -10,3 +10,4 @@ function Nav({ active, onClick, children }) {
         </button>
     );
 }
+export default Nav;

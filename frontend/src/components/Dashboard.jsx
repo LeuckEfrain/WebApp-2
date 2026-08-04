@@ -59,3 +59,4 @@ function Dashboard({ managers, open }) {
         </div>
     );
 }
+export default Dashboard;
