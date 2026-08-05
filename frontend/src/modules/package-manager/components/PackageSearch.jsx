@@ -42,6 +42,13 @@ function PackageSearch({
         onToggleOpen()
     }
 
+    function handleResultsActions(action, sound) {
+        return () => {
+            action()
+            playSound(sound)
+        }
+    }
+
     return (
         <section className="panel">
 
@@ -97,10 +104,10 @@ function PackageSearch({
                                 onQueryChange(e.target.value)
                             }
                             onKeyDown={e => {
-                                if(e.key === 'Enter'){
+                                if (e.key === 'Enter') {
                                     playSound('search')
                                     onSearch()
-                                } 
+                                }
                             }}
                             placeholder="Search for a package..."
                         />
@@ -481,7 +488,7 @@ function PackageSearch({
                                         result.loading ||
                                         !result.results?.length
                                     }
-                                    onClick={onSelectAll}
+                                    onClick={handleResultsActions(onSelectAll, 'selection')}
                                 >
                                     Select All
                                 </button>
@@ -491,7 +498,7 @@ function PackageSearch({
                                     disabled={
                                         selectedPackages.length === 0
                                     }
-                                    onClick={onClearSelection}
+                                    onClick={handleResultsActions(onClearSelection, 'selection')}
                                 >
                                     Clear Selection
                                 </button>
@@ -502,7 +509,7 @@ function PackageSearch({
                                         selectedPackages.length === 0 ||
                                         downloadState?.loading
                                     }
-                                    onClick={onDownloadSelected}
+                                    onClick={handleResultsActions(onDownloadSelected, 'selection')}
                                 >
                                     {downloadState?.loading
                                         ? 'Downloading…'
@@ -515,11 +522,10 @@ function PackageSearch({
                                         !result ||
                                         result.loading
                                     }
-                                    onClick={() =>
-                                        setResultsHidden(
-                                            !resultsHidden
-                                        )
-                                    }
+                                    onClick={() => {
+                                        playSound('selection')
+                                        setResultsHidden(!resultsHidden)
+                                    }}
                                 >
                                     {resultsHidden
                                         ? 'Show Results'
@@ -535,6 +541,7 @@ function PackageSearch({
                                     onClick={() => {
                                         onClearResult();
                                         setResultsHidden(false);
+                                        playSound('selection');
                                         onClearSelection();
                                     }}
                                 >

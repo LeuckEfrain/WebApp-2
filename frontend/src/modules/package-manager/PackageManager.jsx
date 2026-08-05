@@ -154,7 +154,7 @@ function Packages({ managers }) {
                 );
             }
 
-            playSound('success')
+            playSound('downloadComplete')
 
             setDownloadState(previous => ({
                 ...previous,
