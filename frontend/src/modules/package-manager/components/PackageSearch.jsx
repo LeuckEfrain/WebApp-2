@@ -524,7 +524,7 @@ function PackageSearch({
                                     }
                                     onClick={() => {
                                         playSound('selection')
-                                        setResultsHidden(!resultsHidden)
+                                        onToggleResults()
                                     }}
                                 >
                                     {resultsHidden
