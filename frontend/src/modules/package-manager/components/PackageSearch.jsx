@@ -72,9 +72,10 @@ function PackageSearch({
 
                         <select
                             value={selected}
-                            onChange={e =>
+                            onChange={e => {
+                                playSound('selection')
                                 onSelectManager(e.target.value)
-                            }
+                            }}
                         >
                             <option value="all">
                                 All available managers
@@ -95,15 +96,20 @@ function PackageSearch({
                             onChange={e =>
                                 onQueryChange(e.target.value)
                             }
-                            onKeyDown={e =>
-                                e.key === 'Enter' && onSearch()
-                            }
+                            onKeyDown={e => {
+                                e.key === 'Enter'
+                                playSound('search')
+                                onSearch()
+                            }}
                             placeholder="Search for a package..."
                         />
 
                         <button
                             className="primary"
-                            onClick={onSearch}
+                            onClick={() => {
+                                playSound('search')
+                                onSearch()
+                            }}
                         >
                             Search
                         </button>
