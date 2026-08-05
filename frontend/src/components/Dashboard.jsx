@@ -1,4 +1,5 @@
 import React from 'react';
+import { playSound } from '../audio/audioManager';
 
 import Stat from './Stat';
 
@@ -51,7 +52,13 @@ function Dashboard({ managers, open }) {
                         </p>
                     </div>
 
-                    <button className="primary" onClick={open}>
+                    <button
+                        className="primary"
+                        onClick={() => {
+                            playSound('click');
+                            open();
+                        }}
+                    >
                         Open
                     </button>
                 </div>
