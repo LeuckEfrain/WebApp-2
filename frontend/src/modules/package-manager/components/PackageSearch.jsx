@@ -1,4 +1,5 @@
 import React from 'react';
+import { playSound } from '../../../audio/audioManager';
 
 function PackageSearch({
     managers,
