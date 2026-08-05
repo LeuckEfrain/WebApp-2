@@ -36,19 +36,25 @@ function PackageSearch({
     onClearDownload,
     onConfirmDownload
 }) {
+
+    const handleToggleOpen = () => {
+        playSound(open ? 'menuClose' : 'menuOpen')
+        onToggleOpen()
+    }
+
     return (
         <section className="panel">
 
             <div
                 className="collapsible-header search-header"
-                onClick={() => onToggleOpen()}
+                onClick={handleToggleOpen}
             >
                 <div className="collapsible-title">
                     <button
                         className="collapse-button"
                         onClick={e => {
                             e.stopPropagation();
-                            onToggleOpen();
+                            handleToggleOpen()
                         }}
                     >
                         {open ? '▼' : '▶'}
