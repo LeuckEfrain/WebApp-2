@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { playSound } from '../../audio/audioManager'
 
 import {
     normalizePackageResults,
@@ -153,6 +154,8 @@ function Packages({ managers }) {
                 );
             }
 
+            playSound('success')
+
             setDownloadState(previous => ({
                 ...previous,
                 stage: 'complete',
@@ -160,14 +163,16 @@ function Packages({ managers }) {
                 completed: data.successful,
                 results: data.results || [],
                 error: null
-            }));
+            }))
 
         } catch (error) {
+            playSound('error')
+
             setDownloadState(previous => ({
                 ...previous,
                 stage: 'error',
                 error: error.message || String(error)
-            }));
+            }))
         }
     }
 
@@ -342,7 +347,7 @@ function Packages({ managers }) {
     return (
         <div className="stack">
 
-                        <ManagerSelector
+            <ManagerSelector
                 managers={managers}
                 selected={selected}
                 open={managersOpen}
@@ -353,7 +358,7 @@ function Packages({ managers }) {
             />
 
 
-                        <PackageSearch
+            <PackageSearch
                 managers={managers}
 
                 selected={selected}
@@ -403,7 +408,7 @@ function Packages({ managers }) {
             />
 
 
-                        <SoftwareInventory
+            <SoftwareInventory
                 inventory={inventory}
                 open={inventoryOpen}
                 onToggleOpen={() =>

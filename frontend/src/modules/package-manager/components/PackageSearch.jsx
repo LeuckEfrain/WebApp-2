@@ -97,9 +97,10 @@ function PackageSearch({
                                 onQueryChange(e.target.value)
                             }
                             onKeyDown={e => {
-                                e.key === 'Enter'
-                                playSound('search')
-                                onSearch()
+                                if(e.key === 'Enter'){
+                                    playSound('search')
+                                    onSearch()
+                                } 
                             }}
                             placeholder="Search for a package..."
                         />
