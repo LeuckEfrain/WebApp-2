@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { playSound } from "../audio/audioManager";
 
 import Nav from './Nav';
 import Dashboard from './Dashboard';
@@ -65,10 +64,6 @@ function App() {
                 <div className="label lower">MODULES</div>
 
                 <Nav>Modules</Nav>
-
-                <button onClick={() => playSound("click")}>
-                    Test Sound
-                </button>
 
                 <div className="label lower">APPEARANCE</div>
 
