@@ -611,7 +611,8 @@ function PackageSearch({
                                                                 return;
                                                             }
 
-                                                            onTogglePackageSelection(pkg);
+                                                            playSound('selection')
+                                                            onTogglePackageSelection(pkg)
                                                         }}
 
                                                     >
@@ -624,9 +625,10 @@ function PackageSearch({
                                                                 checked={selectedPackages.includes(
                                                                     packageKey(pkg)
                                                                 )}
-                                                                onChange={() =>
+                                                                onChange={() => {
+                                                                    playSound('selection')
                                                                     onTogglePackageSelection(pkg)
-                                                                }
+                                                                }}
                                                             />
 
                                                             <span className="checkbox-box" />

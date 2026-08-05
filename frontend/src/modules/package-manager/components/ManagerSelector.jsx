@@ -45,9 +45,10 @@ function ManagerSelector({
                                         : '')
                                 }
                                 key={m.id}
-                                onClick={() =>
+                                onClick={() => {
+                                    playSound('selection')
                                     onSelect(m.id)
-                                }
+                                }}
                             >
                                 <div className="icon">
                                     {m.name[0]}
