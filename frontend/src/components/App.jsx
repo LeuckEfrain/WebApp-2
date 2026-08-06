@@ -68,7 +68,7 @@ function Home({ onSettings, modules }) {
                             .map((module, index) => (
                                 <div
                                     key={module.id}
-                                    className={`launcher-card ${index === 0 ? 'launcher-card-selected' : ''
+                                    className={`launcher-card ${index === 1 ? 'launcher-card-selected' : ''
                                         } ${module.placeholder
                                             ? 'launcher-card-placeholder'
                                             : ''
@@ -115,7 +115,9 @@ function Home({ onSettings, modules }) {
 
                 <div className="launcher-selection">
                     <span className="launcher-selection-marker" />
-                    <span>{modules[0]?.name}</span>
+                    <span>
+                        {modules.filter(module => module.enabled)[1]?.name}
+                    </span>
                 </div>
             </main>
         </div>
@@ -379,7 +381,9 @@ function Settings({
                         <h1>
                             {page === 'packages'
                                 ? 'Package Managers'
-                                : 'Dashboard'}
+                                : page === 'modules'
+                                    ? 'Modules'
+                                    : 'Dashboard'}
                         </h1>
                     </div>
 
