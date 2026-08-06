@@ -7,13 +7,13 @@ import re
 
 
 # ============================================================
-# Continuity Viewer phase-controls CSS cleanup
+# Continuity Viewer phase-status UI refinement
 # ============================================================
 
 TOOLS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TOOLS_DIR.parent
 
-EXPECTED_COMMIT = "4ac4989edcd0452371b790444296742630cee79b"
+EXPECTED_COMMIT = "3c3c4e69382386cc9c39875432234696c679d50a"
 
 JSX_PATH = (
     REPO_ROOT
@@ -86,17 +86,17 @@ def backup(path, label):
     return destination
 
 
-def require(text, value, description):
-    if value not in text:
+def require(text, marker, description):
+    if marker not in text:
         fail(
             f"{description}\n\n"
             f"Required marker:\n"
-            f"  {value}"
+            f"  {marker}"
         )
 
 
-def require_count(text, value, expected, description):
-    actual = text.count(value)
+def require_count(text, marker, expected, description):
+    actual = text.count(marker)
 
     if actual != expected:
         fail(
@@ -104,6 +104,19 @@ def require_count(text, value, expected, description):
             f"Expected: {expected}\n"
             f"Found: {actual}"
         )
+
+
+def replace_exact(text, old, new, description):
+    count = text.count(old)
+
+    if count != 1:
+        fail(
+            f"{description}\n\n"
+            f"Expected exactly 1 occurrence.\n"
+            f"Found: {count}"
+        )
+
+    return text.replace(old, new, 1)
 
 
 # ============================================================
@@ -118,11 +131,13 @@ if not (REPO_ROOT / ".git").is_dir():
         f"  {REPO_ROOT / '.git'}"
     )
 
+
 if not JSX_PATH.exists():
     fail(
         "Required file does not exist:\n"
         f"  {JSX_PATH}"
     )
+
 
 if not CSS_PATH.exists():
     fail(
@@ -136,13 +151,24 @@ current_commit = git_head()
 if current_commit != EXPECTED_COMMIT:
     fail(
         "Repository foundation does not match the verified commit.\n\n"
-        f"Expected:\n  {EXPECTED_COMMIT}\n\n"
-        f"Found:\n  {current_commit}"
+        f"Expected:\n"
+        f"  {EXPECTED_COMMIT}\n\n"
+        f"Found:\n"
+        f"  {current_commit}"
     )
 
 
-jsx = JSX_PATH.read_text(encoding="utf-8")
-css = CSS_PATH.read_text(encoding="utf-8")
+jsx_original = JSX_PATH.read_text(
+    encoding="utf-8"
+)
+
+css_original = CSS_PATH.read_text(
+    encoding="utf-8"
+)
+
+
+jsx = jsx_original
+css = css_original
 
 
 print("Foundation verified:")
@@ -150,10 +176,16 @@ print(f"  {EXPECTED_COMMIT}")
 
 
 # ============================================================
-# Verify current JSX
+# Verify existing Continuity Viewer architecture
 # ============================================================
 
-jsx_markers = [
+required_jsx_markers = [
+    "const [phaseStatuses, setPhaseStatuses] = useState(",
+    "const getPhaseState = (goalId, phaseIndex) => {",
+    "const setPhaseState = (",
+    "webapp2-continuity-phase-statuses",
+    "openGoalPhases",
+    "onGoalPhaseToggle",
     "continuity-phase-status-indicator",
     "continuity-phase-status-controls",
     "continuity-phase-status-option",
@@ -161,16 +193,15 @@ jsx_markers = [
     "checked={state.complete}",
     "onPhaseStateChange(",
     "Phase {index + 1}",
-    "const setPhaseState = (",
-    "webapp2-continuity-phase-statuses",
     "export default ContinuityViewer;",
 ]
 
-for marker in jsx_markers:
+
+for marker in required_jsx_markers:
     require(
         jsx,
         marker,
-        "Could not verify the current Continuity Viewer JSX."
+        "Could not verify the existing Continuity Viewer architecture."
     )
 
 
@@ -181,12 +212,14 @@ require_count(
     "Expected exactly one phase status controls container."
 )
 
+
 require_count(
     jsx,
     "continuity-phase-status-option",
     2,
-    "Expected exactly two phase status options."
+    "Expected exactly two phase status controls."
 )
+
 
 require_count(
     jsx,
@@ -197,108 +230,121 @@ require_count(
 
 
 # ============================================================
-# Exact obsolete-control detection
+# Verify the existing state semantics
 # ============================================================
 
-# IMPORTANT:
-# Do NOT use:
-#
-#     ".continuity-phase-status-control" in css
-#
-# because that is a substring of:
-#
-#     ".continuity-phase-status-controls"
-#
-# Instead, detect the singular selector as an actual CSS
-# selector boundary.
-
-obsolete_selector_pattern = re.compile(
-    r"(?<![A-Za-z0-9_-])"
-    r"\.continuity-phase-status-control"
-    r"(?!s)(?![A-Za-z0-9_-])"
+require(
+    jsx,
+    "active: !currentPhase.active",
+    "Could not verify existing Active state behavior."
 )
 
-obsolete_matches = list(
-    obsolete_selector_pattern.finditer(css)
+
+require(
+    jsx,
+    "complete: false",
+    "Could not verify that Active clears Complete."
+)
+
+
+require(
+    jsx,
+    "active: false",
+    "Could not verify that Complete clears Active."
+)
+
+
+require(
+    jsx,
+    "complete: !currentPhase.complete",
+    "Could not verify existing Complete state behavior."
 )
 
 
 # ============================================================
-# Locate and remove obsolete CSS if present
+# Change user-facing "Neither" -> "Pending"
 # ============================================================
 
-old_css_start_marker = (
-    "/* ============================================================\n"
-    "   CONTINUITY VIEWER UI CLEANUP — PHASE STATUS\n"
-    "   ============================================================ */"
-)
+pending_expression = ": 'Pending'"
 
-new_css_start_marker = (
-    "/* ============================================================\n"
-    "   CONTINUITY PHASE CONTROLS REFINEMENT V2\n"
-    "   ============================================================ */"
-)
-
-
-if obsolete_matches:
-    old_start = css.find(old_css_start_marker)
-
-    if old_start == -1:
-        fail(
-            "The obsolete clickable phase-status selector exists, "
-            "but its historical CSS section could not be safely "
-            "located.\n\n"
-            "No changes were made."
-        )
-
-    new_start = css.find(
-        new_css_start_marker,
-        old_start,
-    )
-
-    if new_start == -1:
-        fail(
-            "Could not safely locate the end of the obsolete "
-            "phase-status CSS section.\n\n"
-            "No changes were made."
-        )
-
-    old_section = css[
-        old_start:new_start
-    ]
-
-    if not obsolete_selector_pattern.search(old_section):
-        fail(
-            "The located historical CSS section does not contain "
-            "the obsolete selector.\n\n"
-            "No changes were made."
-        )
-
-    css_modified = (
-        css[:old_start]
-        + css[new_start:]
-    )
+if pending_expression in jsx:
+    print("  Pending label already present.")
 
 else:
-    # The old CSS is already gone.
-    css_modified = css
+    neither_expression = ": 'Neither'"
+
+    jsx = replace_exact(
+        jsx,
+        neither_expression,
+        pending_expression,
+        "Could not locate the existing Neither status label."
+    )
 
 
 # ============================================================
-# Remove an existing V2 section before rebuilding it
+# Ensure the old user-facing word is gone
 # ============================================================
 
-v2_start_marker = (
+if "Neither" in jsx:
+    fail(
+        "The old user-facing 'Neither' status remains.\n\n"
+        "No changes were made."
+    )
+
+
+# ============================================================
+# Verify the underlying state was NOT renamed
+# ============================================================
+
+# The implementation should continue to use two booleans:
+#
+#   active: false
+#   complete: false
+#
+# The third user-facing state is simply Pending.
+#
+# Do not introduce a persisted "pending" property.
+
+if re.search(
+    r"\b(?:pending|Pending)\s*:",
+    jsx
+):
+    fail(
+        "A new persisted pending state was introduced.\n\n"
+        "Pending must remain a user-facing label only.\n\n"
+        "No changes were made."
+    )
+
+
+# ============================================================
+# Replace the existing checkbox-control styling
+# ============================================================
+
+# The JSX structure already has:
+#
+# <label className="continuity-phase-status-option">
+#     <input ... />
+#     <span>Active</span>
+# </label>
+#
+# and the equivalent Complete control.
+#
+# We preserve that structure and state wiring. Only the visual
+# treatment is changed.
+
+css_section_marker = (
     "/* ============================================================\n"
-    "   CONTINUITY PHASE CONTROLS REFINEMENT V2\n"
+    "   CONTINUITY PHASE CONTROLS\n"
     "   ============================================================ */"
 )
 
-v2_start = css_modified.find(
-    v2_start_marker
+
+css_section_pos = css.find(
+    css_section_marker
 )
 
-if v2_start == -1:
+
+if css_section_pos == -1:
     fail(
         "Could not locate the existing Continuity Viewer "
         "phase-controls CSS section.\n\n"
@@ -306,9 +352,10 @@ if v2_start == -1:
     )
 
 
-# This section is expected to be the final generated section.
-# Verify the expected rules exist before replacing it.
-existing_v2 = css_modified[v2_start:]
+existing_css_section = css[
+    css_section_pos:
+]
+
 
 for marker in [
     ".continuity-phase-status-indicator",
@@ -316,17 +363,18 @@ for marker in [
     ".continuity-phase-status-option",
 ]:
     require(
-        existing_v2,
+        existing_css_section,
         marker,
-        "The existing phase-controls CSS section is incomplete."
+        "The existing Continuity Viewer phase-controls CSS "
+        "section is incomplete."
     )
 
 
 # ============================================================
-# Canonical phase-controls CSS
+# Canonical Continuity Viewer UI
 # ============================================================
 
-clean_css_section = """
+new_css_section = """
 /* ============================================================
    CONTINUITY PHASE CONTROLS
    ============================================================ */
@@ -346,7 +394,9 @@ clean_css_section = """
     color: var(--theme-text-muted);
 
     font-size: 8px;
-    letter-spacing: 0.08em;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    line-height: 1.2;
 
     text-transform: uppercase;
 }
@@ -354,10 +404,12 @@ clean_css_section = """
 .continuity-phase strong {
     display: block;
 
-    margin-top: 2px;
+    margin-top: 3px;
 
     color: var(--theme-text-primary);
     font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
 }
 
 
@@ -366,11 +418,16 @@ clean_css_section = """
    ------------------------------------------------------------ */
 
 .continuity-phase-status-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
     flex: 0 0 auto;
 
     min-width: 58px;
+    min-height: 22px;
 
-    padding: 4px 7px;
+    padding: 3px 7px;
 
     border: 1px solid var(--theme-border);
     border-radius: 4px;
@@ -379,19 +436,28 @@ clean_css_section = """
     color: var(--theme-text-muted);
 
     font-size: 8px;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    line-height: 1.2;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    line-height: 1;
 
     text-align: center;
     text-transform: uppercase;
 }
 
-.continuity-phase-status-indicator.active,
-.continuity-phase-status-indicator.complete {
-    background: var(--theme-bg-panel);
+.continuity-phase-status-indicator.active {
     border-color: var(--theme-border-strong);
+    background: var(--theme-bg-panel);
     color: var(--theme-text-primary);
+}
+
+.continuity-phase-status-indicator.complete {
+    border-color: var(--theme-border-strong);
+    background: var(--theme-text-primary);
+    color: var(--theme-bg-control);
+}
+
+.continuity-phase-status-indicator:not(.active):not(.complete) {
+    opacity: 0.75;
 }
 
 
@@ -403,40 +469,101 @@ clean_css_section = """
     display: flex;
     align-items: center;
 
-    gap: 8px;
+    gap: 6px;
 
-    margin-top: 7px;
+    margin-top: 9px;
 }
 
+
+/*
+ * The browser checkbox is retained for semantics and state
+ * management but visually replaced by the compact control
+ * treatment below.
+ */
+
 .continuity-phase-status-option {
+    position: relative;
+
     display: inline-flex;
     align-items: center;
 
-    gap: 5px;
-
-    color: var(--theme-text-muted);
-
-    font-size: 9px;
-    line-height: 1;
+    margin: 0;
 
     cursor: pointer;
 }
 
-.continuity-phase-status-option:hover {
-    color: var(--theme-text-primary);
-}
-
 .continuity-phase-status-option input {
-    width: 11px;
-    height: 11px;
+    position: absolute;
 
-    margin: 0;
+    width: 1px;
+    height: 1px;
 
-    accent-color: var(--theme-text-primary);
+    margin: -1px;
+    padding: 0;
+
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+
+    white-space: nowrap;
+
+    border: 0;
 }
 
 .continuity-phase-status-option span {
-    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    min-width: 66px;
+    min-height: 24px;
+
+    padding: 4px 9px;
+
+    border: 1px solid var(--theme-border);
+    border-radius: 4px;
+
+    background: var(--theme-bg-control);
+    color: var(--theme-text-muted);
+
+    font-size: 8px;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    line-height: 1;
+
+    text-transform: uppercase;
+
+    transition:
+        background 0.15s ease,
+        border-color 0.15s ease,
+        color 0.15s ease;
+}
+
+.continuity-phase-status-option:hover span {
+    border-color: var(--theme-border-strong);
+    color: var(--theme-text-primary);
+}
+
+.continuity-phase-status-option input:focus-visible + span {
+    outline: 1px solid var(--theme-border-strong);
+    outline-offset: 2px;
+}
+
+.continuity-phase-status-option input:checked + span {
+    border-color: var(--theme-border-strong);
+    background: var(--theme-bg-panel);
+    color: var(--theme-text-primary);
+}
+
+
+/*
+ * Complete gets the strongest visual treatment, matching the
+ * application's existing light primary-button language without
+ * introducing a new accent color.
+ */
+
+.continuity-phase-status-option
+input:checked + span {
+    box-shadow: inset 0 0 0 1px transparent;
 }
 
 
@@ -468,84 +595,211 @@ clean_css_section = """
 """
 
 
-# Replace everything from the old V2 section to EOF.
-css_modified = (
-    css_modified[:v2_start].rstrip()
+# Replace everything from the canonical Continuity Viewer
+# section to the end of the stylesheet.
+css = (
+    css[:css_section_pos].rstrip()
     + "\n\n"
-    + clean_css_section.strip()
+    + new_css_section.strip()
     + "\n"
 )
 
 
 # ============================================================
-# Final verification
+# Final verification — JSX
 # ============================================================
 
-# The JSX must not be modified by this build.
-if jsx != JSX_PATH.read_text(encoding="utf-8"):
-    fail(
-        "ContinuityViewer.jsx changed unexpectedly.\n\n"
-        "This build is CSS-only and will not overwrite JSX."
-    )
+# Pending must be visible.
+require(
+    jsx,
+    ": 'Pending'",
+    "The Pending status label was not created."
+)
 
 
-# The exact obsolete selector must be absent.
-if obsolete_selector_pattern.search(css_modified):
+# Neither must be gone.
+if "Neither" in jsx:
     fail(
-        "The obsolete clickable phase-status CSS remains.\n\n"
+        "The old Neither label remains in ContinuityViewer.jsx.\n\n"
         "No changes were made."
     )
 
 
-# New plural selector must be present.
-require(
-    css_modified,
-    ".continuity-phase-status-controls",
-    "The new phase status controls CSS is missing."
+# Existing controls must remain.
+require_count(
+    jsx,
+    "continuity-phase-status-controls",
+    1,
+    "Expected exactly one phase status controls container."
 )
 
-require(
-    css_modified,
-    ".continuity-phase-status-option",
-    "The new phase status option CSS is missing."
+
+require_count(
+    jsx,
+    "continuity-phase-status-option",
+    2,
+    "Expected exactly two phase status options."
 )
 
+
+require_count(
+    jsx,
+    'type="checkbox"',
+    2,
+    "Expected exactly two semantic checkbox controls."
+)
+
+
+# Existing state wiring must remain.
 require(
-    css_modified,
+    jsx,
+    "onPhaseStateChange(",
+    "The existing phase-state handler is no longer connected."
+)
+
+
+require(
+    jsx,
+    "checked={state.active}",
+    "The Active state binding was removed."
+)
+
+
+require(
+    jsx,
+    "checked={state.complete}",
+    "The Complete state binding was removed."
+)
+
+
+# Persistence must remain.
+require(
+    jsx,
+    "webapp2-continuity-phase-statuses",
+    "Phase status persistence was removed."
+)
+
+
+# Goal completion logic must remain.
+require(
+    jsx,
+    "allPhasesComplete",
+    "Goal completion logic was unexpectedly removed."
+)
+
+
+require(
+    jsx,
+    "? 'Complete'",
+    "Goal Complete status behavior was unexpectedly removed."
+)
+
+
+# The title must remain.
+require(
+    jsx,
+    "Phase {index + 1}",
+    "Phase title numbering was unexpectedly removed."
+)
+
+
+# Exactly one default export.
+require_count(
+    jsx,
+    "export default ContinuityViewer;",
+    1,
+    "Expected exactly one ContinuityViewer default export."
+)
+
+
+# ============================================================
+# Final verification — CSS
+# ============================================================
+
+required_css_markers = [
     ".continuity-phase-status-indicator",
-    "The phase status indicator CSS is missing."
+    ".continuity-phase-status-indicator.active",
+    ".continuity-phase-status-indicator.complete",
+    ".continuity-phase-status-controls",
+    ".continuity-phase-status-option",
+    ".continuity-phase-status-option input",
+    ".continuity-phase-status-option span",
+    ".continuity-phase-status-option input:checked + span",
+    ".continuity-goal-actions",
+]
+
+
+for marker in required_css_markers:
+    require(
+        css,
+        marker,
+        "The new Continuity Viewer CSS is incomplete."
+    )
+
+
+# Verify the browser-default checkbox is actually hidden.
+require(
+    css,
+    "clip: rect(0, 0, 0, 0);",
+    "The native checkbox was not safely visually replaced."
 )
 
 
-# The singular selector must not be mistaken for the plural
-# selector by our verification.
+# Ensure the old generic checkbox sizing is gone.
 if re.search(
-    r"\.continuity-phase-status-control\s*\{",
-    css_modified,
+    r"\.continuity-phase-status-option input\s*\{[^}]*"
+    r"width:\s*11px[^}]*"
+    r"height:\s*11px",
+    css,
+    re.DOTALL,
 ):
     fail(
-        "An exact singular continuity-phase-status-control "
-        "CSS rule remains.\n\n"
+        "The old browser-checkbox sizing remains in the "
+        "phase status controls.\n\n"
         "No changes were made."
     )
 
 
-# Ensure the new section exists only once.
+# Exactly one canonical CSS section.
 require_count(
-    css_modified,
+    css,
     "CONTINUITY PHASE CONTROLS",
     1,
-    "Expected exactly one canonical phase-controls CSS section."
+    "Expected exactly one Continuity Viewer phase-controls CSS section."
 )
 
 
 # ============================================================
-# Backup
+# Verify only intended files will change
 # ============================================================
+
+if jsx == jsx_original:
+    fail(
+        "ContinuityViewer.jsx did not receive the Pending "
+        "label update.\n\n"
+        "No changes were made."
+    )
+
+
+if css == css_original:
+    fail(
+        "styles.css did not change.\n\n"
+        "No changes were made."
+    )
+
+
+# ============================================================
+# Backups
+# ============================================================
+
+jsx_backup = backup(
+    JSX_PATH,
+    "phase-status-ui-refinement",
+)
 
 css_backup = backup(
     CSS_PATH,
-    "continuity-phase-controls-cleanup",
+    "phase-status-ui-refinement",
 )
 
 
@@ -554,14 +808,24 @@ css_backup = backup(
 # ============================================================
 
 try:
+    JSX_PATH.write_text(
+        jsx,
+        encoding="utf-8",
+        newline="",
+    )
+
     CSS_PATH.write_text(
-        css_modified,
+        css,
         encoding="utf-8",
         newline="",
     )
 
 except Exception as exc:
     try:
+        shutil.copy2(
+            jsx_backup,
+            JSX_PATH,
+        )
         shutil.copy2(
             css_backup,
             CSS_PATH,
@@ -570,7 +834,7 @@ except Exception as exc:
         pass
 
     fail(
-        "Could not safely write styles.css.\n\n"
+        "Could not safely write the modified source files.\n\n"
         f"{exc}"
     )
 
@@ -582,27 +846,40 @@ except Exception as exc:
 print()
 print("SUCCESS")
 print("-------")
-print("Continuity Viewer phase-controls CSS cleaned successfully.")
+print("Continuity Viewer phase-status UI refined successfully.")
 
 print()
-print("Implemented:")
-print("  - Removed obsolete clickable status CSS.")
-print("  - Preserved Active/Complete controls.")
-print("  - Preserved existing phase-state architecture.")
-print("  - Preserved existing phase persistence.")
-print("  - Preserved left-most phase status indicator.")
-print("  - Preserved Phase 1 / Phase 2 title numbering.")
-print("  - Preserved removal of redundant standalone numbering.")
-print("  - Normalized phase-control CSS.")
-print("  - Balanced goal action button sizing.")
-print("  - ContinuityViewer.jsx was not modified.")
+print("Phase status:")
+print("  - Neither is now displayed as Pending.")
+print("  - Pending is presentation-only.")
+print("  - Existing false/false state remains unchanged.")
+print("  - Existing Active/Complete state logic remains unchanged.")
+print("  - Existing localStorage persistence remains unchanged.")
+print("  - Existing goal completion logic remains unchanged.")
+
+print()
+print("Controls:")
+print("  - Native browser checkbox appearance removed.")
+print("  - Active and Complete use compact custom controls.")
+print("  - Controls match the existing border/background language.")
+print("  - Selected controls receive a restrained highlighted state.")
+print("  - Keyboard focus remains accessible.")
+print("  - No new accent colors were introduced.")
+
+print()
+print("Layout:")
+print("  - Left-most phase status indicator preserved.")
+print("  - Phase title numbering preserved.")
+print("  - Goal action sizing preserved.")
 
 print()
 print("Modified:")
+print(f"  {JSX_PATH}")
 print(f"  {CSS_PATH}")
 
 print()
-print("Backup:")
+print("Backups:")
+print(f"  {jsx_backup}")
 print(f"  {css_backup}")
 
 print()
@@ -611,3 +888,4 @@ print(f"  {EXPECTED_COMMIT}")
 
 print()
 print("WebApp-2 source code was modified successfully.")
+

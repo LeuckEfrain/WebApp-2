@@ -328,7 +328,7 @@ function Section({
                                                                 ? 'Active'
                                                                 : state.complete
                                                                     ? 'Complete'
-                                                                    : 'Pending'}
+                                                                    : 'Neither'}
                                                         </span>
 
                                                         <div className="continuity-phase-main">

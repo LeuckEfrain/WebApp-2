@@ -2059,9 +2059,7 @@ pre {
     color: var(--theme-text-muted);
 
     font-size: 8px;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    line-height: 1.2;
+    letter-spacing: 0.08em;
 
     text-transform: uppercase;
 }
@@ -2069,12 +2067,10 @@ pre {
 .continuity-phase strong {
     display: block;
 
-    margin-top: 3px;
+    margin-top: 2px;
 
     color: var(--theme-text-primary);
     font-size: 11px;
-    font-weight: 600;
-    line-height: 1.4;
 }
 
 
@@ -2083,16 +2079,11 @@ pre {
    ------------------------------------------------------------ */
 
 .continuity-phase-status-indicator {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-
     flex: 0 0 auto;
 
     min-width: 58px;
-    min-height: 22px;
 
-    padding: 3px 7px;
+    padding: 4px 7px;
 
     border: 1px solid var(--theme-border);
     border-radius: 4px;
@@ -2101,28 +2092,19 @@ pre {
     color: var(--theme-text-muted);
 
     font-size: 8px;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    line-height: 1;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    line-height: 1.2;
 
     text-align: center;
     text-transform: uppercase;
 }
 
-.continuity-phase-status-indicator.active {
-    border-color: var(--theme-border-strong);
-    background: var(--theme-bg-panel);
-    color: var(--theme-text-primary);
-}
-
+.continuity-phase-status-indicator.active,
 .continuity-phase-status-indicator.complete {
+    background: var(--theme-bg-panel);
     border-color: var(--theme-border-strong);
-    background: var(--theme-text-primary);
-    color: var(--theme-bg-control);
-}
-
-.continuity-phase-status-indicator:not(.active):not(.complete) {
-    opacity: 0.75;
+    color: var(--theme-text-primary);
 }
 
 
@@ -2134,101 +2116,40 @@ pre {
     display: flex;
     align-items: center;
 
-    gap: 6px;
+    gap: 8px;
 
-    margin-top: 9px;
+    margin-top: 7px;
 }
 
-
-/*
- * The browser checkbox is retained for semantics and state
- * management but visually replaced by the compact control
- * treatment below.
- */
-
 .continuity-phase-status-option {
-    position: relative;
-
     display: inline-flex;
     align-items: center;
 
-    margin: 0;
+    gap: 5px;
+
+    color: var(--theme-text-muted);
+
+    font-size: 9px;
+    line-height: 1;
 
     cursor: pointer;
 }
 
+.continuity-phase-status-option:hover {
+    color: var(--theme-text-primary);
+}
+
 .continuity-phase-status-option input {
-    position: absolute;
+    width: 11px;
+    height: 11px;
 
-    width: 1px;
-    height: 1px;
+    margin: 0;
 
-    margin: -1px;
-    padding: 0;
-
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-
-    white-space: nowrap;
-
-    border: 0;
+    accent-color: var(--theme-text-primary);
 }
 
 .continuity-phase-status-option span {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-
-    min-width: 66px;
-    min-height: 24px;
-
-    padding: 4px 9px;
-
-    border: 1px solid var(--theme-border);
-    border-radius: 4px;
-
-    background: var(--theme-bg-control);
-    color: var(--theme-text-muted);
-
-    font-size: 8px;
-    font-weight: 600;
-    letter-spacing: 0.09em;
-    line-height: 1;
-
-    text-transform: uppercase;
-
-    transition:
-        background 0.15s ease,
-        border-color 0.15s ease,
-        color 0.15s ease;
-}
-
-.continuity-phase-status-option:hover span {
-    border-color: var(--theme-border-strong);
-    color: var(--theme-text-primary);
-}
-
-.continuity-phase-status-option input:focus-visible + span {
-    outline: 1px solid var(--theme-border-strong);
-    outline-offset: 2px;
-}
-
-.continuity-phase-status-option input:checked + span {
-    border-color: var(--theme-border-strong);
-    background: var(--theme-bg-panel);
-    color: var(--theme-text-primary);
-}
-
-
-/*
- * Complete gets the strongest visual treatment, matching the
- * application's existing light primary-button language without
- * introducing a new accent color.
- */
-
-.continuity-phase-status-option
-input:checked + span {
-    box-shadow: inset 0 0 0 1px transparent;
+    white-space: nowrap;
 }
 
 
