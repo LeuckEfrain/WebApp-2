@@ -1,10 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, {
+    useEffect,
+    useState
+} from 'react';
 
-import Nav from './Nav';
-import Dashboard from './Dashboard';
-import PackageManager from '../modules/package-manager/PackageManager';
+import Home from './home/Home';
+import Settings from './settings/Settings';
+
 
 const API = 'http://127.0.0.1:8000';
+
 
 const DEFAULT_HOME_MODULES = [
     {
@@ -21,399 +25,6 @@ const DEFAULT_HOME_MODULES = [
     }
 ];
 
-function Home({ onSettings, modules }) {
-    return (
-        <div className="home-shell">
-            <header className="home-topbar">
-                <div className="home-brand">MODULAR</div>
-
-                <button
-                    type="button"
-                    className="settings-button"
-                    onClick={onSettings}
-                    aria-label="Open Settings"
-                >
-                    <span className="settings-icon">⚙</span>
-                    <span>Settings</span>
-                </button>
-            </header>
-
-            <main className="launcher">
-                <div className="launcher-row-area">
-
-                    {/* Vertical navigation — Phase 3 */}
-                    <button
-                        type="button"
-                        className="launcher-axis-arrow"
-                        disabled
-                        aria-label="Previous row"
-                    >
-                        ▲
-                    </button>
-
-                    <div className="launcher-row">
-
-                        {/* Horizontal navigation — Phase 2 */}
-                        <button
-                            type="button"
-                            className="launcher-arrow"
-                            disabled
-                            aria-label="Previous module"
-                        >
-                            ‹
-                        </button>
-
-                        {modules
-                            .filter(module => module.enabled)
-                            .map((module, index) => (
-                                <div
-                                    key={module.id}
-                                    className={`launcher-card ${index === 1 ? 'launcher-card-selected' : ''
-                                        } ${module.placeholder
-                                            ? 'launcher-card-placeholder'
-                                            : ''
-                                        }`}
-                                >
-                                    <div className="launcher-card-icon">
-                                        {module.icon}
-                                    </div>
-
-                                    <div className="launcher-card-title">
-                                        {module.name}
-                                    </div>
-
-                                    {!module.placeholder && (
-                                        <div className="launcher-card-subtitle">
-                                            {module.id === 'gmail-analyzer'
-                                                ? 'Analyzer'
-                                                : 'Tools'}
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-
-                        <button
-                            type="button"
-                            className="launcher-arrow"
-                            disabled
-                            aria-label="Next module"
-                        >
-                            ›
-                        </button>
-                    </div>
-
-                    {/* Vertical navigation — Phase 3 */}
-                    <button
-                        type="button"
-                        className="launcher-axis-arrow"
-                        disabled
-                        aria-label="Next row"
-                    >
-                        ▼
-                    </button>
-                </div>
-
-                <div className="launcher-selection">
-                    <span className="launcher-selection-marker" />
-                    <span>
-                        {modules.filter(module => module.enabled)[1]?.name}
-                    </span>
-                </div>
-            </main>
-        </div>
-    );
-}
-
-function ModuleSettings({ modules, setModules }) {
-
-    const renameModule = (id, name) => {
-
-        setModules(current =>
-            current.map(module =>
-                module.id === id
-                    ? { ...module, name }
-                    : module
-            )
-        );
-
-    };
-
-    const toggleModule = (id) => {
-
-        setModules(current =>
-            current.map(module =>
-                module.id === id
-                    ? {
-                        ...module,
-                        enabled: !module.enabled
-                    }
-                    : module
-            )
-        );
-
-    };
-
-
-    const addModule = () => {
-
-        const id = `module-${Date.now()}`;
-
-        const newModule = {
-            id,
-            name: 'New Module',
-            icon: '+',
-            enabled: true
-        };
-
-        setModules(current => [
-            ...current,
-            newModule
-        ]);
-
-    };
-
-    return (
-        <section className="module-settings">
-
-            <div className="settings-section-header">
-                <div>
-                    <div className="eyebrow">
-                        HOME
-                    </div>
-
-                    <h2>
-                        Home Modules
-                    </h2>
-                </div>
-
-                <p>
-                    Rename the applications displayed
-                    on the Home screen.
-                </p>
-            </div>
-
-
-            <div className="module-settings-list">
-
-                {modules.map(module => (
-
-                    <div
-                        className="module-setting"
-                        key={module.id}
-                    >
-
-                        <div className="module-setting-icon">
-                            {module.icon}
-                        </div>
-
-
-                        <div className="module-setting-info">
-
-                            <div className="module-setting-id">
-                                {module.id}
-                            </div>
-
-                            <label>
-                                DISPLAY NAME
-
-                                <input
-                                    type="text"
-                                    value={module.name}
-                                    onChange={e =>
-                                        renameModule(
-                                            module.id,
-                                            e.target.value
-                                        )
-                                    }
-                                />
-                            </label>
-
-                            <label className="module-enabled">
-                                <input
-                                    type="checkbox"
-                                    checked={module.enabled}
-                                    onChange={() =>
-                                        toggleModule(module.id)
-                                    }
-                                />
-
-                                SHOW ON HOME
-                            </label>
-
-                        </div>
-
-                    </div>
-
-                ))}
-
-            </div>
-
-            <button
-                type="button"
-                className="add-module-button"
-                onClick={addModule}
-            >
-                + Add Module
-            </button>
-
-        </section>
-    );
-}
-
-function Settings({
-    page,
-    setPage,
-    managers,
-    theme,
-    setTheme,
-    font,
-    setFont,
-    onHome,
-    modules,
-    setModules
-}) {
-    return (
-        <div className="shell">
-
-            <aside className="sidebar">
-
-                <div className="logo">
-                    MODULAR
-                </div>
-
-                <button
-                    type="button"
-                    className="settings-home-button"
-                    onClick={onHome}
-                >
-                    ← Home
-                </button>
-
-                <div className="label">
-                    WORKSPACE
-                </div>
-
-                <Nav
-                    active={page === 'dashboard'}
-                    onClick={() => setPage('dashboard')}
-                >
-                    Dashboard
-                </Nav>
-
-                <Nav
-                    active={page === 'packages'}
-                    onClick={() => setPage('packages')}
-                >
-                    Package Managers
-                </Nav>
-
-                <div className="label lower">
-                    SYSTEM
-                </div>
-
-                <Nav>
-                    Processes
-                </Nav>
-
-                <Nav>
-                    Environment
-                </Nav>
-
-                <div className="label lower">
-                    MODULES
-                </div>
-
-                <Nav
-                    active={page === 'modules'}
-                    onClick={() => setPage('modules')}
-                >
-                    Modules
-                </Nav>
-
-                <div className="label lower">
-                    APPEARANCE
-                </div>
-
-                <div className="theme-control">
-                    <label htmlFor="theme-select">
-                        COLOR PALETTE
-                    </label>
-
-                    <select
-                        id="theme-select"
-                        value={theme}
-                        onChange={e => setTheme(e.target.value)}
-                    >
-                        <option value="obsidian">Obsidian</option>
-                        <option value="slate">Slate</option>
-                        <option value="forest">Forest</option>
-                        <option value="copper">Copper</option>
-                    </select>
-                </div>
-
-                <div className="theme-control">
-                    <label htmlFor="font-select">
-                        FONT
-                    </label>
-
-                    <select
-                        id="font-select"
-                        value={font}
-                        onChange={e => setFont(e.target.value)}
-                    >
-                        <option value="inter">Inter</option>
-                        <option value="plex">IBM Plex Sans</option>
-                        <option value="jetbrains">JetBrains Mono</option>
-                        <option value="source">Source Sans 3</option>
-                    </select>
-                </div>
-
-            </aside>
-
-            <main className="main">
-
-                <header>
-                    <div>
-                        <div className="eyebrow">
-                            SETTINGS
-                        </div>
-
-                        <h1>
-                            {page === 'packages'
-                                ? 'Package Managers'
-                                : page === 'modules'
-                                    ? 'Modules'
-                                    : 'Dashboard'}
-                        </h1>
-                    </div>
-
-                    <div className="online">
-                        <i /> BACKEND ONLINE
-                    </div>
-                </header>
-
-                {page === 'dashboard' ? (
-                    <Dashboard
-                        managers={managers}
-                        open={() => setPage('packages')}
-                    />
-                ) : page === 'packages' ? (
-                    <PackageManager
-                        managers={managers}
-                    />
-                ) : (
-                    <ModuleSettings
-                        modules={modules}
-                        setModules={setModules}
-                    />
-                )}
-
-            </main>
-
-        </div>
-    );
-}
-
 
 function App() {
 
@@ -422,6 +33,7 @@ function App() {
     const [page, setPage] = useState('dashboard');
 
     const [managers, setManagers] = useState([]);
+
 
     const [modules, setModules] = useState(() => {
 
@@ -439,20 +51,26 @@ function App() {
         }
 
         return DEFAULT_HOME_MODULES;
+
     });
 
-    const [theme, setTheme] = useState(() => {
-        return localStorage.getItem('modular-theme') || 'obsidian';
-    });
 
-    const [font, setFont] = useState(() => {
-        return localStorage.getItem('modular-font') || 'inter';
-    });
+    const [theme, setTheme] = useState(() => (
+        localStorage.getItem('modular-theme')
+        || 'obsidian'
+    ));
+
+
+    const [font, setFont] = useState(() => (
+        localStorage.getItem('modular-font')
+        || 'inter'
+    ));
 
 
     useEffect(() => {
 
-        document.documentElement.dataset.theme = theme;
+        document.documentElement.dataset.theme =
+            theme;
 
         localStorage.setItem(
             'modular-theme',
@@ -464,7 +82,8 @@ function App() {
 
     useEffect(() => {
 
-        document.documentElement.dataset.font = font;
+        document.documentElement.dataset.font =
+            font;
 
         localStorage.setItem(
             'modular-font',
@@ -483,12 +102,13 @@ function App() {
 
     }, [modules]);
 
+
     useEffect(() => {
 
         fetch(API + '/api/package-managers')
-            .then(r => r.json())
+            .then(response => response.json())
             .then(setManagers)
-            .catch(() => { });
+            .catch(() => {});
 
     }, []);
 
@@ -497,7 +117,9 @@ function App() {
 
         return (
             <Home
-                onSettings={() => setView('settings')}
+                onSettings={() =>
+                    setView('settings')
+                }
                 modules={modules}
             />
         );
@@ -507,16 +129,25 @@ function App() {
 
     return (
         <Settings
+
             page={page}
             setPage={setPage}
+
             managers={managers}
+
             theme={theme}
             setTheme={setTheme}
+
             font={font}
             setFont={setFont}
-            onHome={() => setView('home')}
+
+            onHome={() =>
+                setView('home')
+            }
+
             modules={modules}
             setModules={setModules}
+
         />
     );
 }
