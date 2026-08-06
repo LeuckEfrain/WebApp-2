@@ -1,5 +1,7 @@
-function LauncherCard({ module,
-    selected, onClick }) {
+function LauncherCard({
+    module,
+    selected
+}) {
 
     return (
         <div

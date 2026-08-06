@@ -1,5 +1,7 @@
-function LauncherCard({ module,
-    selected, onClick }) {
+function LauncherCard({
+    module,
+    selected
+}) {
 
     return (
         <div
@@ -14,9 +16,7 @@ function LauncherCard({ module,
             }`}
         >
 
-            <div
-            onClick={onClick}
-            className="launcher-card-icon">
+            <div className="launcher-card-icon">
                 {module.icon}
             </div>
 
