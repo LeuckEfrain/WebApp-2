@@ -10,24 +10,14 @@ const DEFAULT_HOME_MODULES = [
     {
         id: 'gmail-analyzer',
         name: 'Gmail Analyzer',
-        icon: 'G'
+        icon: 'G',
+        enabled: true
     },
     {
         id: 'git-tools',
         name: 'Git Tools',
-        icon: 'G'
-    },
-    {
-        id: 'future-1',
-        name: 'Future Module',
-        icon: '+',
-        placeholder: true
-    },
-    {
-        id: 'future-2',
-        name: 'Future Module',
-        icon: '+',
-        placeholder: true
+        icon: 'G',
+        enabled: true
     }
 ];
 
@@ -73,32 +63,34 @@ function Home({ onSettings, modules }) {
                             ‹
                         </button>
 
-                        {modules.map((module, index) => (
-                            <div
-                                key={module.id}
-                                className={`launcher-card ${index === 0 ? 'launcher-card-selected' : ''
-                                    } ${module.placeholder
-                                        ? 'launcher-card-placeholder'
-                                        : ''
-                                    }`}
-                            >
-                                <div className="launcher-card-icon">
-                                    {module.icon}
-                                </div>
-
-                                <div className="launcher-card-title">
-                                    {module.name}
-                                </div>
-
-                                {!module.placeholder && (
-                                    <div className="launcher-card-subtitle">
-                                        {module.id === 'gmail-analyzer'
-                                            ? 'Analyzer'
-                                            : 'Tools'}
+                        {modules
+                            .filter(module => module.enabled)
+                            .map((module, index) => (
+                                <div
+                                    key={module.id}
+                                    className={`launcher-card ${index === 0 ? 'launcher-card-selected' : ''
+                                        } ${module.placeholder
+                                            ? 'launcher-card-placeholder'
+                                            : ''
+                                        }`}
+                                >
+                                    <div className="launcher-card-icon">
+                                        {module.icon}
                                     </div>
-                                )}
-                            </div>
-                        ))}
+
+                                    <div className="launcher-card-title">
+                                        {module.name}
+                                    </div>
+
+                                    {!module.placeholder && (
+                                        <div className="launcher-card-subtitle">
+                                            {module.id === 'gmail-analyzer'
+                                                ? 'Analyzer'
+                                                : 'Tools'}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
 
                         <button
                             type="button"
@@ -144,6 +136,39 @@ function ModuleSettings({ modules, setModules }) {
 
     };
 
+    const toggleModule = (id) => {
+
+        setModules(current =>
+            current.map(module =>
+                module.id === id
+                    ? {
+                        ...module,
+                        enabled: !module.enabled
+                    }
+                    : module
+            )
+        );
+
+    };
+
+
+    const addModule = () => {
+
+        const id = `module-${Date.now()}`;
+
+        const newModule = {
+            id,
+            name: 'New Module',
+            icon: '+',
+            enabled: true
+        };
+
+        setModules(current => [
+            ...current,
+            newModule
+        ]);
+
+    };
 
     return (
         <section className="module-settings">
@@ -168,48 +193,66 @@ function ModuleSettings({ modules, setModules }) {
 
             <div className="module-settings-list">
 
-                {modules
-                    .filter(module => !module.placeholder)
-                    .map(module => (
+                {modules.map(module => (
 
-                        <div
-                            className="module-setting"
-                            key={module.id}
-                        >
+                    <div
+                        className="module-setting"
+                        key={module.id}
+                    >
 
-                            <div className="module-setting-icon">
-                                {module.icon}
+                        <div className="module-setting-icon">
+                            {module.icon}
+                        </div>
+
+
+                        <div className="module-setting-info">
+
+                            <div className="module-setting-id">
+                                {module.id}
                             </div>
 
+                            <label>
+                                DISPLAY NAME
 
-                            <div className="module-setting-info">
+                                <input
+                                    type="text"
+                                    value={module.name}
+                                    onChange={e =>
+                                        renameModule(
+                                            module.id,
+                                            e.target.value
+                                        )
+                                    }
+                                />
+                            </label>
 
-                                <div className="module-setting-id">
-                                    {module.id}
-                                </div>
+                            <label className="module-enabled">
+                                <input
+                                    type="checkbox"
+                                    checked={module.enabled}
+                                    onChange={() =>
+                                        toggleModule(module.id)
+                                    }
+                                />
 
-                                <label>
-                                    DISPLAY NAME
-
-                                    <input
-                                        type="text"
-                                        value={module.name}
-                                        onChange={e =>
-                                            renameModule(
-                                                module.id,
-                                                e.target.value
-                                            )
-                                        }
-                                    />
-                                </label>
-
-                            </div>
+                                SHOW ON HOME
+                            </label>
 
                         </div>
 
-                    ))}
+                    </div>
+
+                ))}
 
             </div>
+
+            <button
+                type="button"
+                className="add-module-button"
+                onClick={addModule}
+            >
+                + Add Module
+            </button>
 
         </section>
     );
