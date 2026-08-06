@@ -38,77 +38,20 @@ function App() {
 
     const [modules, setModules] = useState(() => {
 
-        const registeredModules =
-            getInstanceModuleDefinitions().map(module => ({
-                id: module.id,
-                name: module.name,
-                icon: module.icon,
-                enabled: true
-            }));
-
         try {
+
             const saved =
                 localStorage.getItem('home-modules');
 
             if (saved) {
-
-                const savedModules =
-                    JSON.parse(saved);
-
-                if (Array.isArray(savedModules)) {
-
-                    const mergedModules =
-                        [...savedModules];
-
-                    registeredModules.forEach(
-                        instanceModule => {
-
-                            const exists =
-                                mergedModules.some(
-                                    module =>
-                                        module.id ===
-                                        instanceModule.id
-                                );
-
-                            if (!exists) {
-                                mergedModules.push(
-                                    instanceModule
-                                );
-                            }
-                        }
-                    );
-
-                    return mergedModules;
-                }
+                return JSON.parse(saved);
             }
 
         } catch {
-            // Fall back to defaults plus
-            // registered instance modules.
+            // Fall back to defaults.
         }
 
-        const mergedDefaults =
-            [...DEFAULT_HOME_MODULES];
-
-        registeredModules.forEach(
-            instanceModule => {
-
-                const exists =
-                    mergedDefaults.some(
-                        module =>
-                            module.id ===
-                            instanceModule.id
-                    );
-
-                if (!exists) {
-                    mergedDefaults.push(
-                        instanceModule
-                    );
-                }
-            }
-        );
-
-        return mergedDefaults;
+        return DEFAULT_HOME_MODULES;
 
     });
 
