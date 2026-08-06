@@ -1,17 +1,21 @@
 from pathlib import Path
+from datetime import datetime
 import shutil
 import subprocess
-from datetime import datetime
+import re
+import sys
 
 
 # ============================================================
-# Continuity Viewer — phase controls refinement
+# Configuration
 # ============================================================
 
 TOOLS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TOOLS_DIR.parent
 
-EXPECTED_COMMIT = "44f893b63f6339ed03d7138c410b9ba379a66f2f"
+EXPECTED_COMMIT = (
+    "8a0452bc303ab0f17000541db5f290b775ead438"
+)
 
 JSX_PATH = (
     REPO_ROOT
@@ -31,8 +35,12 @@ CSS_PATH = (
     / "styles.css"
 )
 
-STAMP = datetime.now().strftime("%Y%m%d-%H%M%S")
+TIMESTAMP = datetime.now().strftime("%Y%m%d-%H%M%S")
 
+
+# ============================================================
+# Utilities
+# ============================================================
 
 def fail(message):
     print()
@@ -41,54 +49,77 @@ def fail(message):
     print(message)
     print()
     print("No changes were made.")
-    raise SystemExit(1)
+    sys.exit(1)
 
 
-def backup(path, label):
-    destination = path.with_name(
-        f"{path.name}.pre-{label}-{STAMP}"
+def run_git(*args):
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(REPO_ROOT),
+                *args,
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        fail(
+            "Git verification failed.\n\n"
+            + (exc.stderr or exc.stdout or str(exc)).strip()
+        )
+
+    return result.stdout.strip()
+
+
+def backup_file(path, label):
+    backup = path.with_name(
+        f"{path.name}.pre-{label}-{TIMESTAMP}"
     )
 
-    if destination.exists():
+    if backup.exists():
         fail(
             "Backup already exists:\n"
-            f"  {destination}\n\n"
-            "Refusing to overwrite it."
+            f"  {backup}"
         )
 
-    shutil.copy2(path, destination)
-    return destination
+    shutil.copy2(path, backup)
+    return backup
 
 
-def find_unique(text, marker, description):
-    count = text.count(marker)
+def require_exactly(text, needle, count, description):
+    actual = text.count(needle)
 
-    if count != 1:
+    if actual != count:
         fail(
-            f"Could not safely locate {description}.\n\n"
-            f"Expected exactly 1 occurrence, found: {count}\n\n"
+            f"{description}\n\n"
+            f"Expected exactly {count} occurrence(s), "
+            f"found: {actual}\n\n"
             "No changes were made."
         )
-
-    return text.index(marker)
 
 
 # ============================================================
 # Repository verification
 # ============================================================
 
-if not (REPO_ROOT / ".git").exists():
+if not (REPO_ROOT / ".git").is_dir():
     fail(
-        "This script must be placed in the WebApp-2 repository "
-        "tools directory.\n\n"
-        f"Expected .git directory:\n  {REPO_ROOT / '.git'}"
+        "This script must be placed in the WebApp-2 "
+        "repository tools directory.\n\n"
+        "Expected .git directory:\n"
+        f"  {REPO_ROOT / '.git'}"
     )
+
 
 if not JSX_PATH.exists():
     fail(
         "Required file does not exist:\n"
         f"  {JSX_PATH}"
     )
+
 
 if not CSS_PATH.exists():
     fail(
@@ -97,32 +128,29 @@ if not CSS_PATH.exists():
     )
 
 
-current_commit = subprocess.run(
-    [
-        "git",
-        "-C",
-        str(REPO_ROOT),
-        "rev-parse",
-        "HEAD",
-    ],
-    capture_output=True,
-    text=True,
-    check=True,
-).stdout.strip()
-
+current_commit = run_git(
+    "rev-parse",
+    "HEAD",
+)
 
 if current_commit != EXPECTED_COMMIT:
     fail(
-        "Repository foundation does not match the verified foundation.\n\n"
-        f"Expected:\n  {EXPECTED_COMMIT}\n\n"
-        f"Found:\n  {current_commit}\n\n"
-        "If you have committed the current working version, "
-        "provide that new commit hash before building again."
+        "Repository foundation does not match the verified "
+        "foundation.\n\n"
+        f"Expected:\n"
+        f"  {EXPECTED_COMMIT}\n\n"
+        f"Found:\n"
+        f"  {current_commit}"
     )
 
 
-jsx = JSX_PATH.read_text(encoding="utf-8")
-css = CSS_PATH.read_text(encoding="utf-8")
+jsx = JSX_PATH.read_text(
+    encoding="utf-8"
+)
+
+css = CSS_PATH.read_text(
+    encoding="utf-8"
+)
 
 
 print("Foundation verified:")
@@ -130,236 +158,499 @@ print(f"  {EXPECTED_COMMIT}")
 
 
 # ============================================================
-# Verify the successful UI-cleanup working state
+# Verify actual foundation architecture
 # ============================================================
 
-for marker, description in [
-    (
-        "continuity-phase-status-control",
-        "the existing phase status control",
-    ),
-    (
-        "continuity-phase-title",
-        "the phase title",
-    ),
-    (
-        "const cyclePhaseState =",
-        "the existing phase status helper",
-    ),
-]:
+# These are not guesses about the UI. They are the actual
+# state-management structures in the verified foundation.
+
+required_foundation_markers = [
+    "function Section({",
+    "getPhaseState,",
+    "onPhaseStateChange",
+    "const getPhaseState = (goalId, phaseIndex) => {",
+    "const setPhaseState = (",
+    "const cyclePhaseState = (",
+    "const state =",
+    "getPhaseState(",
+    "goal.id,",
+    "index",
+    "continuity-phase-status-control",
+    "Phase {index + 1}",
+    "className=\"continuity-phase-main\"",
+    "className=\"continuity-phase-title\"",
+    "export default ContinuityViewer;",
+]
+
+
+for marker in required_foundation_markers:
     if marker not in jsx:
         fail(
-            f"Could not locate {description}.\n\n"
-            f"Expected marker:\n  {marker}\n\n"
+            "Required foundation marker does not exist:\n"
+            f"  {marker}\n\n"
+            "The repository may have changed since the "
+            "verified foundation.\n\n"
             "No changes were made."
         )
 
 
-if jsx.count("continuity-phase-status-control") != 1:
-    fail(
-        "Expected exactly one existing phase status control."
-    )
-
-
-if jsx.count("const cyclePhaseState =") != 1:
-    fail(
-        "Expected exactly one cyclePhaseState helper."
-    )
-
-
 # ============================================================
-# 1. Locate the existing status button
-#
-# We find the class marker, then walk backward to the button
-# opening and forward to that button's closing tag.
-#
-# This intentionally does NOT depend on whitespace or the
-# precise formatting of the JSX expression.
+# Verify state-management integrity
 # ============================================================
 
-status_marker = "continuity-phase-status-control"
-
-status_marker_pos = find_unique(
+require_exactly(
     jsx,
-    status_marker,
-    "the existing phase status indicator",
+    "const getPhaseState = (goalId, phaseIndex) => {",
+    1,
+    "Expected exactly one getPhaseState definition.",
 )
 
-button_start = jsx.rfind(
-    "<button",
-    0,
-    status_marker_pos,
-)
-
-if button_start == -1:
-    fail(
-        "Found the phase status class, but could not locate "
-        "its containing <button>."
-    )
-
-
-button_end = jsx.find(
-    "</button>",
-    status_marker_pos,
-)
-
-if button_end == -1:
-    fail(
-        "Found the phase status button opening, but could not "
-        "locate its closing </button>."
-    )
-
-button_end += len("</button>")
-
-
-existing_status_button = jsx[
-    button_start:button_end
-]
-
-
-# Make absolutely sure we're replacing the intended element.
-if "continuity-phase-status-control" not in existing_status_button:
-    fail(
-        "The located button does not contain the expected "
-        "Continuity phase status class."
-    )
-
-
-# ============================================================
-# 2. Replace the status button with a passive indicator
-# ============================================================
-
-status_indicator = """<span
-    className={
-        'continuity-phase-status-indicator' +
-        (state.active
-            ? ' active'
-            : state.complete
-                ? ' complete'
-                : '')
-    }
->
-    {state.active
-        ? 'Active'
-        : state.complete
-            ? 'Complete'
-            : 'Neither'}
-</span>"""
-
-
-jsx = (
-    jsx[:button_start]
-    + status_indicator
-    + jsx[button_end:]
-)
-
-
-# ============================================================
-# 3. Locate the phase title block
-#
-# This block has no nested <div>, so its first closing </div>
-# is its own closing tag.
-# ============================================================
-
-title_marker = '<div className="continuity-phase-title">'
-
-title_start = find_unique(
+require_exactly(
     jsx,
-    title_marker,
-    "the phase title block",
+    "const setPhaseState = (",
+    1,
+    "Expected exactly one setPhaseState definition.",
 )
 
-title_end = jsx.find(
-    "</div>",
-    title_start,
+require_exactly(
+    jsx,
+    "const cyclePhaseState = (",
+    1,
+    "Expected exactly one cyclePhaseState definition.",
 )
 
-if title_end == -1:
+
+# The persistence mechanism must remain present.
+if "webapp2-continuity-phase-statuses" not in jsx:
     fail(
-        "Found the phase title block but could not locate "
-        "its closing </div>."
+        "The existing phase-status localStorage key "
+        "could not be verified.\n\n"
+        "No changes were made."
     )
 
-title_end += len("</div>")
 
-
-# ============================================================
-# 4. Add separate Active / Complete controls
-# ============================================================
-
-controls = """
-<div className="continuity-phase-status-controls">
-    <label className="continuity-phase-status-option">
-        <input
-            type="checkbox"
-            checked={state.active}
-            onChange={() =>
-                onPhaseStateChange(
-                    goal.id,
-                    index,
-                    'active'
-                )
-            }
-        />
-        <span>Active</span>
-    </label>
-
-    <label className="continuity-phase-status-option">
-        <input
-            type="checkbox"
-            checked={state.complete}
-            onChange={() =>
-                onPhaseStateChange(
-                    goal.id,
-                    index,
-                    'complete'
-                )
-            }
-        />
-        <span>Complete</span>
-    </label>
-</div>"""
-
-
-jsx = (
-    jsx[:title_end]
-    + controls
-    + jsx[title_end:]
-)
-
-
-# ============================================================
-# 5. Verify the redundant numeric indicator is absent
-#
-# The previous successful cleanup should already have removed
-# the standalone {index + 1} phase number.
-# ============================================================
-
-if "{index + 1}" in jsx:
+# The existing mutually-exclusive behavior must remain
+# untouched. Verify the important assignments before editing.
+if "active: !currentPhase.active" not in jsx:
     fail(
-        "The redundant standalone phase number is still present.\n\n"
+        "Could not verify the existing Active-state behavior.\n\n"
+        "No changes were made."
+    )
+
+if "complete: false" not in jsx:
+    fail(
+        "Could not verify the existing Active-state exclusivity.\n\n"
+        "No changes were made."
+    )
+
+if "active: false" not in jsx:
+    fail(
+        "Could not verify the existing Complete-state exclusivity.\n\n"
+        "No changes were made."
+    )
+
+if "complete: !currentPhase.complete" not in jsx:
+    fail(
+        "Could not verify the existing Complete-state behavior.\n\n"
         "No changes were made."
     )
 
 
 # ============================================================
-# 6. CSS
+# Locate the phase rendering block
 # ============================================================
 
-css_marker = "/* CONTINUITY PHASE CONTROLS REFINEMENT */"
+# Work from the exact semantic structure in the foundation.
+phase_map_marker = "{goal.phases.map("
 
-if css_marker in css:
+phase_map_pos = jsx.find(
+    phase_map_marker
+)
+
+if phase_map_pos == -1:
     fail(
-        "The phase-controls refinement CSS already exists.\n\n"
-        "Refusing to add it twice."
+        "Could not locate the goal phase rendering map.\n\n"
+        "No changes were made."
     )
 
 
-css_addition = r"""
+phase_state_pos = jsx.find(
+    "const state =",
+    phase_map_pos
+)
 
-/* ============================================================
-   CONTINUITY PHASE CONTROLS REFINEMENT
-   ============================================================ */
+if phase_state_pos == -1:
+    fail(
+        "Could not locate the phase state lookup.\n\n"
+        "No changes were made."
+    )
+
+
+phase_element_pos = jsx.find(
+    "className={",
+    phase_state_pos
+)
+
+if phase_element_pos == -1:
+    fail(
+        "Could not locate the phase element.\n\n"
+        "No changes were made."
+    )
+
+
+phase_class_pos = jsx.find(
+    "'continuity-phase'",
+    phase_element_pos
+)
+
+if phase_class_pos == -1:
+    fail(
+        "Could not locate the continuity-phase class.\n\n"
+        "No changes were made."
+    )
+
+
+# Make sure the phase title belongs to this same renderer.
+phase_title_pos = jsx.find(
+    "Phase {index + 1}",
+    phase_state_pos
+)
+
+if phase_title_pos == -1:
+    fail(
+        "Could not locate the phase title inside the "
+        "phase renderer.\n\n"
+        "No changes were made."
+    )
+
+
+# ============================================================
+# Remove redundant standalone number
+# ============================================================
+
+standalone_number_pattern = re.compile(
+    r"""
+    <span>
+    \s*
+    \{index \+ 1\}
+    \s*
+    </span>
+    """,
+    re.VERBOSE,
+)
+
+number_matches = list(
+    standalone_number_pattern.finditer(
+        jsx,
+        phase_state_pos,
+    )
+)
+
+if len(number_matches) != 1:
+    fail(
+        "Could not safely locate the redundant standalone "
+        "phase number.\n\n"
+        f"Expected exactly 1 occurrence, found: "
+        f"{len(number_matches)}\n\n"
+        "No changes were made."
+    )
+
+
+number_match = number_matches[0]
+
+# Ensure the number is before the phase title and therefore
+# is the standalone number, not the title's "Phase {index + 1}".
+if number_match.start() > phase_title_pos:
+    fail(
+        "The located phase number appears after the phase "
+        "title.\n\n"
+        "No changes were made."
+    )
+
+
+# ============================================================
+# Locate old status button
+# ============================================================
+
+status_button_pattern = re.compile(
+    r"""
+    <button
+    \s*
+    type="button"
+    \s*
+    className=\{
+        \s*
+        'continuity-phase-status-control'
+        .*?
+    \}
+    \s*
+    onClick=\{\(\)\s*=>\s*
+        cyclePhaseState\(
+            \s*
+            goal\.id
+            \s*,\s*
+            index
+            \s*
+        \)
+    \s*\}
+    .*?
+    </button>
+    """,
+    re.VERBOSE | re.DOTALL,
+)
+
+status_matches = list(
+    status_button_pattern.finditer(
+        jsx,
+        phase_state_pos,
+    )
+)
+
+if len(status_matches) != 1:
+    fail(
+        "Could not safely locate the existing phase status "
+        "button.\n\n"
+        f"Expected exactly 1 occurrence, found: "
+        f"{len(status_matches)}\n\n"
+        "No changes were made."
+    )
+
+
+status_match = status_matches[0]
+
+
+# ============================================================
+# Remove both obsolete UI elements
+# ============================================================
+
+# Remove the standalone number first.
+jsx_after_number = (
+    jsx[:number_match.start()]
+    + jsx[number_match.end():]
+)
+
+# Recalculate the status-button match after the first edit.
+status_matches_after_number = list(
+    status_button_pattern.finditer(
+        jsx_after_number,
+        phase_state_pos,
+    )
+)
+
+if len(status_matches_after_number) != 1:
+    fail(
+        "The phase status button could not be re-identified "
+        "after removing the standalone phase number.\n\n"
+        "No changes were made."
+    )
+
+
+status_match = status_matches_after_number[0]
+
+
+# Replace the old clickable status button with a passive
+# indicator. The actual controls are added separately below.
+status_indicator = """<span
+className={
+'continuity-phase-status-indicator' +
+(state.active
+? ' active'
+: state.complete
+? ' complete'
+: '')
+}
+>
+{state.active
+? 'Active'
+: state.complete
+? 'Complete'
+: 'Neither'}
+</span>"""
+
+
+jsx_after_status = (
+    jsx_after_number[:status_match.start()]
+    + status_indicator
+    + jsx_after_number[status_match.end():]
+)
+
+
+# ============================================================
+# Locate phase title block
+# ============================================================
+
+title_container_marker = (
+    '<div className="continuity-phase-title">'
+)
+
+title_container_pos = jsx_after_status.find(
+    title_container_marker,
+    phase_state_pos,
+)
+
+if title_container_pos == -1:
+    fail(
+        "Could not safely locate the phase title container.\n\n"
+        "No changes were made."
+    )
+
+
+title_container_end = jsx_after_status.find(
+    "</div>",
+    title_container_pos,
+)
+
+if title_container_end == -1:
+    fail(
+        "Could not safely locate the end of the phase title "
+        "container.\n\n"
+        "No changes were made."
+    )
+
+
+title_container_end += len("</div>")
+
+
+# ============================================================
+# Insert Active / Complete controls
+# ============================================================
+
+if "continuity-phase-status-controls" in jsx_after_status:
+    fail(
+        "Phase status controls already exist in the current "
+        "source.\n\n"
+        "No changes were made."
+    )
+
+
+controls = """
+
+
+<div className="continuity-phase-status-controls">
+<label className="continuity-phase-status-option">
+<input
+type="checkbox"
+checked={state.active}
+onChange={() =>
+onPhaseStateChange(
+goal.id,
+index,
+'active'
+)
+}
+/>
+<span>Active</span>
+</label>
+
+<label className="continuity-phase-status-option">
+<input
+type="checkbox"
+checked={state.complete}
+onChange={() =>
+onPhaseStateChange(
+goal.id,
+index,
+'complete'
+)
+}
+/>
+<span>Complete</span>
+</label>
+</div>"""
+
+
+jsx_modified = (
+    jsx_after_status[:title_container_end]
+    + controls
+    + jsx_after_status[title_container_end:]
+)
+
+
+# ============================================================
+# Remove obsolete cyclePhaseState definition
+# ============================================================
+
+cycle_start_marker = (
+    "const cyclePhaseState = ("
+)
+
+cycle_start = jsx_modified.find(
+    cycle_start_marker
+)
+
+if cycle_start == -1:
+    fail(
+        "Could not locate the obsolete cyclePhaseState "
+        "definition.\n\n"
+        "No changes were made."
+    )
+
+
+# The next function in the verified foundation is openAll.
+open_all_marker = (
+    "const openAll = () => {"
+)
+
+open_all_pos = jsx_modified.find(
+    open_all_marker,
+    cycle_start,
+)
+
+if open_all_pos == -1:
+    fail(
+        "Could not safely locate the end of cyclePhaseState.\n\n"
+        "No changes were made."
+    )
+
+
+jsx_modified = (
+    jsx_modified[:cycle_start]
+    + jsx_modified[open_all_pos:]
+)
+
+
+# ============================================================
+# CSS preparation
+# ============================================================
+
+css_marker = (
+    "/* Continuity Viewer phase status controls */"
+)
+
+# Remove a previously generated version of this exact section
+# if one somehow exists in the foundation being processed.
+if css_marker in css:
+    css_start = css.find(css_marker)
+
+    # This build expects the foundation to not already contain
+    # the new controls. Remove through the end of our section.
+    css_end_marker = (
+        "/* End Continuity Viewer phase status controls */"
+    )
+
+    css_end = css.find(
+        css_end_marker,
+        css_start,
+    )
+
+    if css_end == -1:
+        fail(
+            "A partial Continuity Viewer phase-status CSS "
+            "section already exists.\n\n"
+            "No changes were made."
+        )
+
+    css_end += len(css_end_marker)
+
+    css = (
+        css[:css_start]
+        + css[css_end:]
+    )
+
+
+new_css = """
+
+/* Continuity Viewer phase status controls */
 
 .continuity-phase-status-indicator {
     flex: 0 0 auto;
@@ -383,7 +674,6 @@ css_addition = r"""
 
 .continuity-phase-status-indicator.active,
 .continuity-phase-status-indicator.complete {
-    background: var(--theme-bg-panel);
     border-color: var(--theme-border-strong);
     color: var(--theme-text-primary);
 }
@@ -391,7 +681,7 @@ css_addition = r"""
 .continuity-phase-status-controls {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 8px;
     margin-top: 7px;
 }
 
@@ -416,100 +706,172 @@ css_addition = r"""
     width: 11px;
     height: 11px;
     margin: 0;
-
-    accent-color: var(--theme-text-primary);
 }
 
 .continuity-phase-status-option span {
     white-space: nowrap;
 }
 
-.continuity-phase-main {
-    min-width: 0;
-    flex: 1;
-}
-
-.continuity-phase-title {
-    min-width: 0;
-}
-
-.continuity-phase-title > span {
-    display: block;
-
-    color: var(--theme-text-muted);
-
-    font-size: 8px;
-    letter-spacing: 0.08em;
-
-    text-transform: uppercase;
-}
-
-.continuity-phase strong {
-    display: block;
-
-    margin-top: 2px;
-
-    color: var(--theme-text-primary);
-    font-size: 11px;
-}
+/* End Continuity Viewer phase status controls */
 """
 
-css += css_addition
+
+css_modified = css.rstrip() + "\n" + new_css
 
 
 # ============================================================
-# PRE-WRITE SAFETY CHECKS
+# Final verification
 # ============================================================
 
-if "continuity-phase-status-control" in jsx:
-    fail(
-        "The old clickable phase status control remains."
-    )
+# --- JSX structure ---
 
-if "continuity-phase-status-indicator" not in jsx:
-    fail(
-        "The new passive phase status indicator was not created."
-    )
+if "continuity-phase-status-control" in jsx_modified:
+    # This singular class is the old control. The new class
+    # "continuity-phase-status-controls" intentionally contains
+    # that substring, so test the actual class declaration.
+    if (
+        "className=\"continuity-phase-status-control\""
+        in jsx_modified
+        or
+        "className={'continuity-phase-status-control'"
+        in jsx_modified
+    ):
+        fail(
+            "The obsolete clickable phase status control "
+            "remains.\n\n"
+            "No changes were made."
+        )
 
-if jsx.count("continuity-phase-status-controls") != 1:
-    fail(
-        "Expected exactly one Active/Complete controls container."
-    )
 
-if jsx.count('type="checkbox"') != 2:
+if "cyclePhaseState" in jsx_modified:
     fail(
-        "Expected exactly two phase status checkboxes."
-    )
-
-if jsx.count("onPhaseStateChange") < 2:
-    fail(
-        "Expected both Active and Complete controls to use "
-        "the existing phase-state handler."
-    )
-
-if "{index + 1}" in jsx:
-    fail(
-        "The redundant standalone phase number remains."
-    )
-
-if jsx.count("export default ContinuityViewer;") != 1:
-    fail(
-        "Expected exactly one ContinuityViewer default export."
+        "The obsolete cyclePhaseState helper remains.\n\n"
+        "No changes were made."
     )
 
 
-# ============================================================
-# Backups
-# ============================================================
+if "setPhaseState = (" not in jsx_modified:
+    fail(
+        "The existing setPhaseState function was removed.\n\n"
+        "No changes were made."
+    )
 
-jsx_backup = backup(
-    JSX_PATH,
-    "phase-controls-refinement",
+
+if "onPhaseStateChange" not in jsx_modified:
+    fail(
+        "The new phase controls are not connected to the "
+        "existing phase-state mechanism.\n\n"
+        "No changes were made."
+    )
+
+
+require_exactly(
+    jsx_modified,
+    "continuity-phase-status-controls",
+    1,
+    "Expected exactly one phase status controls container.",
 )
 
-css_backup = backup(
+
+require_exactly(
+    jsx_modified,
+    "continuity-phase-status-option",
+    2,
+    "Expected exactly two phase status options.",
+)
+
+
+require_exactly(
+    jsx_modified,
+    'type="checkbox"',
+    2,
+    "Expected exactly two phase status checkboxes.",
+)
+
+
+require_exactly(
+    jsx_modified,
+    "checked={state.active}",
+    1,
+    "Expected exactly one Active checkbox binding.",
+)
+
+
+require_exactly(
+    jsx_modified,
+    "checked={state.complete}",
+    1,
+    "Expected exactly one Complete checkbox binding.",
+)
+
+
+# The title remains.
+if "Phase {index + 1}" not in jsx_modified:
+    fail(
+        "The phase title was unexpectedly removed.\n\n"
+        "No changes were made."
+    )
+
+
+# The redundant standalone number must be gone.
+standalone_number_remaining = list(
+    standalone_number_pattern.finditer(
+        jsx_modified,
+        0,
+    )
+)
+
+if standalone_number_remaining:
+    fail(
+        "The redundant standalone phase number remains.\n\n"
+        "No changes were made."
+    )
+
+
+# Exactly one default export.
+require_exactly(
+    jsx_modified,
+    "export default ContinuityViewer;",
+    1,
+    "Expected exactly one ContinuityViewer default export.",
+)
+
+
+# --- CSS ---
+
+if ".continuity-phase-status-controls" not in css_modified:
+    fail(
+        "New phase controls CSS is missing.\n\n"
+        "No changes were made."
+    )
+
+
+if ".continuity-phase-status-option" not in css_modified:
+    fail(
+        "New phase status option CSS is missing.\n\n"
+        "No changes were made."
+    )
+
+
+if ".continuity-phase-status-indicator" not in css_modified:
+    fail(
+        "New phase status indicator CSS is missing.\n\n"
+        "No changes were made."
+    )
+
+
+# ============================================================
+# Backup
+# ============================================================
+
+jsx_backup = backup_file(
+    JSX_PATH,
+    "phase-status-controls",
+)
+
+css_backup = backup_file(
     CSS_PATH,
-    "phase-controls-refinement",
+    "phase-status-controls",
 )
 
 
@@ -517,79 +879,67 @@ css_backup = backup(
 # Write
 # ============================================================
 
-JSX_PATH.write_text(
-    jsx,
-    encoding="utf-8",
-    newline="",
-)
+try:
+    JSX_PATH.write_text(
+        jsx_modified,
+        encoding="utf-8",
+        newline="",
+    )
 
-CSS_PATH.write_text(
-    css,
-    encoding="utf-8",
-    newline="",
-)
+    CSS_PATH.write_text(
+        css_modified,
+        encoding="utf-8",
+        newline="",
+    )
+
+except Exception as exc:
+    # Restore from backups if writing fails.
+    try:
+        shutil.copy2(
+            jsx_backup,
+            JSX_PATH,
+        )
+        shutil.copy2(
+            css_backup,
+            CSS_PATH,
+        )
+    except Exception:
+        pass
+
+    fail(
+        "Could not write the modified source safely.\n\n"
+        f"{exc}"
+    )
 
 
 # ============================================================
-# Final verification
+# Success
 # ============================================================
-
-final_jsx = JSX_PATH.read_text(encoding="utf-8")
-final_css = CSS_PATH.read_text(encoding="utf-8")
-
-if "continuity-phase-status-indicator" not in final_jsx:
-    fail(
-        "Final verification failed: status indicator missing."
-    )
-
-if "continuity-phase-status-control" in final_jsx:
-    fail(
-        "Final verification failed: old status button remains."
-    )
-
-if final_jsx.count("continuity-phase-status-controls") != 1:
-    fail(
-        "Final verification failed: controls container count "
-        "is incorrect."
-    )
-
-if final_jsx.count('type="checkbox"') != 2:
-    fail(
-        "Final verification failed: expected two checkboxes."
-    )
-
-if "{index + 1}" in final_jsx:
-    fail(
-        "Final verification failed: redundant phase number remains."
-    )
-
-if final_jsx.count("export default ContinuityViewer;") != 1:
-    fail(
-        "Final verification failed: default export count is incorrect."
-    )
-
-if css_marker not in final_css:
-    fail(
-        "Final verification failed: CSS refinement is missing."
-    )
-
 
 print()
 print("SUCCESS")
 print("-------")
-print("Continuity Viewer phase controls refined.")
+print("Continuity Viewer phase controls implemented.")
 
 print()
-print("Implemented:")
-print("  - Leftmost status indicator is now informational.")
-print("  - Separate Active control restored.")
-print("  - Separate Complete control restored.")
-print("  - Neither is represented by both controls being unchecked.")
-print("  - Existing phase-state handler remains in use.")
-print("  - Existing persistence remains in use.")
-print("  - Existing mutual exclusion remains in use.")
-print("  - Redundant standalone phase numbering removed.")
+print("Phase UI:")
+print("  - Status remains at the left-most end of each phase.")
+print("  - Standalone phase numbering was removed.")
 print("  - Phase titles still display Phase 1, Phase 2, etc.")
+print("  - Active checkbox added.")
+print("  - Complete checkbox added.")
+print("  - Existing phase-state mechanism is used.")
+print("  - Existing localStorage persistence is preserved.")
+print("  - Existing mutually-exclusive state behavior is preserved.")
+
+print()
+print("State architecture:")
+print("  - setPhaseState remains authoritative.")
+print("  - cyclePhaseState was removed because the new controls")
+print("    no longer need the cycling wrapper.")
+print("  - Goal completion logic remains unchanged.")
+print("  - Goal-level Active Goal behavior remains unchanged.")
+print("  - Phase visibility behavior remains unchanged.")
 
 print()
 print("Modified:")
