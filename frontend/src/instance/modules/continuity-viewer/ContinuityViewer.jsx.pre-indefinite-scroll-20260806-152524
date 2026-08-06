@@ -166,7 +166,7 @@ function Section({ section, open, onToggle, activeGoal, onGoalSelect }) {
             </button>
 
             {open && (
-                <div className="continuity-section-body indefinite-list">
+                <div className="continuity-section-body">
                     {section.description && (
                         <p className="continuity-description">
                             {section.description}
@@ -235,7 +235,7 @@ function Section({ section, open, onToggle, activeGoal, onGoalSelect }) {
                                     </button>
                                 </div>
 
-                                <div className="continuity-phase-list indefinite-list">
+                                <div className="continuity-phase-list">
                                     {goal.phases.map(
                                         (phase, index) => (
                                             <div

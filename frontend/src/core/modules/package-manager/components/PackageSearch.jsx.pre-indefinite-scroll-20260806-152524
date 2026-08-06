@@ -607,7 +607,7 @@ function PackageSearch({
 
                                     {result.results.length > 0 && (
 
-                                        <div className="package-results indefinite-list">
+                                        <div className="package-results">
 
                                             {result.results.map(
                                                 (pkg, index) => (

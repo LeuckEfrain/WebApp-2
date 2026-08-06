@@ -1,34 +1,196 @@
 from pathlib import Path
 import shutil
-import subprocess
 import sys
 from datetime import datetime
 
 
-EXPECTED_COMMIT = "660f2015a58b1914a42ff30202d54d05dbabca80"
-APP_RELATIVE = Path("frontend/src/core/App.jsx")
+EXPECTED_COMMIT = "5c21bf934d84ae3badf380d4c9bc4955ab9b796b"
+
+SCROLLABLE_CSS = r'''
+/* =========================================================
+   UNIVERSAL SCROLLABLE COLLECTIONS
+
+   Any UI collection that may contain an indefinite number
+   of items should use .indefinite-list.
+
+   The collection remains visually bounded while all items
+   remain accessible through internal scrolling.
+   ========================================================= */
+
+.indefinite-list {
+    max-height: 420px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--theme-border-strong) transparent;
+}
+
+.indefinite-list::-webkit-scrollbar {
+    width: 7px;
+}
+
+.indefinite-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.indefinite-list::-webkit-scrollbar-thumb {
+    background: var(--theme-border-strong);
+    border-radius: 999px;
+}
+
+.indefinite-list::-webkit-scrollbar-thumb:hover {
+    background: var(--theme-text-muted);
+}
+
+/*
+ * Lists that are nested inside a bounded panel should not
+ * cause the panel itself to grow indefinitely.
+ */
+.panel .indefinite-list {
+    min-height: 0;
+}
+
+/*
+ * Existing Software Inventory already uses a bounded
+ * <pre>. Keep its established behavior intact.
+ */
+pre {
+    max-height: 480px;
+    overflow: auto;
+}
+'''
 
 
 def fail(message):
-    print("ERROR")
+    print("\nERROR")
     print("-----")
     print(message)
-    print()
-    print("No changes were made.")
+    print("\nNo changes were made.")
     sys.exit(1)
 
 
-def find_repo():
-    script_dir = Path(__file__).resolve().parent
+def find_repo_root():
+    """
+    Locate the WebApp-2 repository from this script's location.
 
-    for directory in [script_dir, *script_dir.parents]:
-        if (directory / ".git").is_dir():
-            return directory
+    This intentionally does not depend on the process's current
+    working directory. The script can therefore be launched from
+    another directory as long as the script itself is inside the
+    repository.
+    """
+    script_path = Path(__file__).resolve()
 
-    fail("Could not locate the WebApp-2 Git repository.")
+    for candidate in [script_path.parent, *script_path.parents]:
+        if (
+            (candidate / ".git").exists()
+            and (candidate / "frontend" / "src" / "core").is_dir()
+            and (candidate / "frontend" / "src" / "instance").is_dir()
+        ):
+            return candidate
+
+    fail(
+        "Could not locate the WebApp-2 repository from the script location.\n"
+        "\n"
+        "Place modify_frontend.py somewhere inside:\n"
+        "D:\\Projects\\WebApps\\webapp_2\n"
+        "\n"
+        "The repository must contain frontend\\src\\core and "
+        "frontend\\src\\instance."
+    )
 
 
-def get_commit(repo):
+def read_text(path):
+    try:
+        return path.read_text(encoding="utf-8")
+    except Exception as exc:
+        fail(f"Could not read:\n{path}\n\n{exc}")
+
+
+def backup(path, tag):
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_path = path.with_name(
+        f"{path.name}.pre-{tag}-{timestamp}"
+    )
+
+    if backup_path.exists():
+        fail(
+            "Backup already exists and will not be overwritten:\n"
+            f"{backup_path}"
+        )
+
+    shutil.copy2(path, backup_path)
+    return backup_path
+
+
+def write_verified(path, original, updated):
+    if original == updated:
+        fail(f"No change was produced for:\n{path}")
+
+    path.write_text(updated, encoding="utf-8")
+
+    written = read_text(path)
+
+    if written != updated:
+        fail(
+            "Verification failed after writing:\n"
+            f"{path}"
+        )
+
+
+def add_css_once(css_path):
+    original = read_text(css_path)
+
+    marker = "UNIVERSAL SCROLLABLE COLLECTIONS"
+
+    if marker in original:
+        return False, None
+
+    updated = original.rstrip() + "\n\n" + SCROLLABLE_CSS.strip() + "\n"
+
+    backup_path = backup(css_path, "indefinite-scroll")
+    write_verified(css_path, original, updated)
+
+    return True, backup_path
+
+
+def add_class_once(path, old, new, description):
+    original = read_text(path)
+
+    count = original.count(old)
+
+    if count == 0:
+        fail(
+            f"Could not locate the expected foundation for {description}.\n"
+            f"File: {path}\n"
+            f"Expected text: {old!r}"
+        )
+
+    if count > 1:
+        fail(
+            f"Expected exactly one foundation occurrence for {description}, "
+            f"but found {count}.\n"
+            f"File: {path}"
+        )
+
+    if new in original:
+        return False, None
+
+    updated = original.replace(old, new, 1)
+
+    backup_path = backup(path, "indefinite-scroll")
+    write_verified(path, original, updated)
+
+    return True, backup_path
+
+
+def verify_git_foundation(repo):
+    """
+    Verify the repository is actually on the requested foundation when
+    Git is available. This is deliberately conservative.
+    """
+    import subprocess
+
     try:
         result = subprocess.run(
             ["git", "rev-parse", "HEAD"],
@@ -37,239 +199,219 @@ def get_commit(repo):
             text=True,
             check=True,
         )
-    except Exception as exc:
+    except Exception:
+        # Git verification is useful but shouldn't make the script
+        # impossible to run in a repository where Git is unavailable.
+        return None
+
+    head = result.stdout.strip()
+
+    if head != EXPECTED_COMMIT:
         fail(
-            "Could not determine the current Git commit:\n"
-            f"{exc}"
+            "The repository HEAD does not match the supplied foundation.\n\n"
+            f"Expected:\n{EXPECTED_COMMIT}\n\n"
+            f"Found:\n{head}\n\n"
+            "The repository may have changed since the verified "
+            "foundation.\n"
+            "No changes were made."
         )
 
-    return result.stdout.strip()
-
-
-def make_backup(path):
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-
-    backup = path.with_name(
-        f"{path.name}.pre-continuity-launcher-fix-{timestamp}"
-    )
-
-    if backup.exists():
-        fail(
-            "Refusing to overwrite an existing backup:\n"
-            f"{backup}"
-        )
-
-    shutil.copy2(path, backup)
-    return backup
+    return head
 
 
 def main():
-    repo = find_repo()
+    print("WebApp-2 indefinite-list scrolling update")
+    print("------------------------------------------")
 
-    actual_commit = get_commit(repo)
+    repo = find_repo_root()
 
-    if actual_commit != EXPECTED_COMMIT:
-        fail(
-            "Git foundation mismatch.\n\n"
-            f"Expected:\n  {EXPECTED_COMMIT}\n\n"
-            f"Found:\n  {actual_commit}\n\n"
-            "Refusing to guess the correct foundation."
-        )
+    print(f"Repository:\n  {repo}")
 
-    app = repo / APP_RELATIVE
+    verified_commit = verify_git_foundation(repo)
 
-    if not app.exists():
-        fail(
-            "Required file does not exist:\n"
-            f"{app}"
-        )
+    if verified_commit:
+        print(f"Foundation:\n  {verified_commit}")
+    else:
+        print("Foundation:\n  Git verification unavailable")
 
-    source = app.read_text(encoding="utf-8")
+    frontend = repo / "frontend" / "src"
 
-    start_marker = "const [modules, setModules] = useState(() => {"
+    styles = frontend / "core" / "styles.css"
+    package_search = (
+        frontend
+        / "core"
+        / "modules"
+        / "package-manager"
+        / "components"
+        / "PackageSearch.jsx"
+    )
+    continuity = (
+        frontend
+        / "instance"
+        / "modules"
+        / "continuity-viewer"
+        / "ContinuityViewer.jsx"
+    )
 
-    start = source.find(start_marker)
+    required = [
+        styles,
+        package_search,
+        continuity,
+    ]
 
-    if start == -1:
-        fail(
-            "Could not locate the modules state initializer in App.jsx."
-        )
+    for path in required:
+        if not path.exists():
+            fail(f"Required file does not exist:\n{path}")
 
-    # The initializer is immediately followed by the theme state.
-    # Use that as the structural endpoint instead of depending
-    # on whitespace or exact indentation.
-    end_marker = "const [theme, setTheme] = useState(() => ("
+    backups = []
+    changes = []
 
-    end = source.find(end_marker, start)
+    # ---------------------------------------------------------
+    # 1. Add universal scrollable-list styling.
+    # ---------------------------------------------------------
 
-    if end == -1:
-        fail(
-            "Could not locate the end boundary of the modules "
-            "state initializer."
-        )
+    changed, backup_path = add_css_once(styles)
 
-    original_block = source[start:end]
+    if changed:
+        changes.append(str(styles))
+        backups.append(str(backup_path))
 
-    if "localStorage.getItem('home-modules')" not in original_block:
-        fail(
-            "The located modules initializer does not contain the "
-            "expected home-modules localStorage state."
-        )
+    # ---------------------------------------------------------
+    # 2. Package search results.
+    #
+    # Search results can contain an arbitrarily large number
+    # of packages. The results collection should scroll inside
+    # the Package Search panel rather than growing the panel.
+    # ---------------------------------------------------------
 
-    if "return DEFAULT_HOME_MODULES;" not in original_block:
-        fail(
-            "The located modules initializer does not contain the "
-            "expected DEFAULT_HOME_MODULES fallback."
-        )
+    changed, backup_path = add_class_once(
+        package_search,
+        '<div className="package-results">',
+        '<div className="package-results indefinite-list">',
+        "Package Search result collection",
+    )
 
-    if "registeredModules" in original_block:
-        fail(
-            "Instance-module integration already appears to exist "
-            "inside the modules initializer."
-        )
+    if changed:
+        changes.append(str(package_search))
+        backups.append(str(backup_path))
 
-    replacement = """const [modules, setModules] = useState(() => {
+    # ---------------------------------------------------------
+    # 3. Continuity Viewer.
+    #
+    # The Continuity document will grow over time. Each section
+    # should remain bounded when its collection becomes large.
+    # ---------------------------------------------------------
 
-        const registeredModules =
-            getInstanceModuleDefinitions().map(module => ({
-                id: module.id,
-                name: module.name,
-                icon: module.icon,
-                enabled: true
-            }));
+    original = read_text(continuity)
 
-        try {
-            const saved =
-                localStorage.getItem('home-modules');
+    replacements = [
+        (
+            '<div className="continuity-section-body">',
+            '<div className="continuity-section-body indefinite-list">',
+            "Continuity section body",
+        ),
+        (
+            '<div className="continuity-phase-list">',
+            '<div className="continuity-phase-list indefinite-list">',
+            "Continuity phase list",
+        ),
+    ]
 
-            if (saved) {
+    continuity_updated = original
+    replacement_count = 0
 
-                const savedModules =
-                    JSON.parse(saved);
+    for old, new, description in replacements:
+        count = continuity_updated.count(old)
 
-                if (Array.isArray(savedModules)) {
-
-                    const mergedModules =
-                        [...savedModules];
-
-                    registeredModules.forEach(
-                        instanceModule => {
-
-                            const exists =
-                                mergedModules.some(
-                                    module =>
-                                        module.id ===
-                                        instanceModule.id
-                                );
-
-                            if (!exists) {
-                                mergedModules.push(
-                                    instanceModule
-                                );
-                            }
-                        }
-                    );
-
-                    return mergedModules;
-                }
-            }
-
-        } catch {
-            // Fall back to defaults plus
-            // registered instance modules.
-        }
-
-        const mergedDefaults =
-            [...DEFAULT_HOME_MODULES];
-
-        registeredModules.forEach(
-            instanceModule => {
-
-                const exists =
-                    mergedDefaults.some(
-                        module =>
-                            module.id ===
-                            instanceModule.id
-                    );
-
-                if (!exists) {
-                    mergedDefaults.push(
-                        instanceModule
-                    );
-                }
-            }
-        );
-
-        return mergedDefaults;
-
-    });
-
-
-    """
-
-    updated = source[:start] + replacement + source[end:]
-
-    if updated == source:
-        fail("The modification produced no changes.")
-
-    backup = make_backup(app)
-
-    try:
-        app.write_text(updated, encoding="utf-8")
-
-        verification = app.read_text(encoding="utf-8")
-
-        required_after_write = [
-            "const registeredModules =",
-            "getInstanceModuleDefinitions().map",
-            "const mergedModules =",
-            "return mergedModules;",
-            "const mergedDefaults =",
-        ]
-
-        missing = [
-            marker
-            for marker in required_after_write
-            if marker not in verification
-        ]
-
-        if missing:
-            raise RuntimeError(
-                "Missing expected post-change structures:\n"
-                + "\n".join(f"  - {item}" for item in missing)
+        if count == 0:
+            # A section may not exist in a future foundation. Since
+            # this foundation is verified, treat this as a safety
+            # failure rather than guessing.
+            fail(
+                f"Could not locate the expected foundation for "
+                f"{description}.\n"
+                f"File: {continuity}"
             )
 
-    except Exception as exc:
-        shutil.copy2(backup, app)
+        if count > 1:
+            fail(
+                f"Expected exactly one occurrence for {description}, "
+                f"but found {count}.\n"
+                f"File: {continuity}"
+            )
 
-        fail(
-            "Post-write verification failed.\n"
-            f"Reason: {exc}\n\n"
-            "The original App.jsx was restored from backup."
+        if new not in continuity_updated:
+            continuity_updated = continuity_updated.replace(
+                old,
+                new,
+                1,
+            )
+            replacement_count += 1
+
+    if replacement_count:
+        backup_path = backup(continuity, "indefinite-scroll")
+        write_verified(
+            continuity,
+            original,
+            continuity_updated,
         )
+        changes.append(str(continuity))
+        backups.append(str(backup_path))
 
-    print("SUCCESS")
+    # ---------------------------------------------------------
+    # Final verification.
+    # ---------------------------------------------------------
+
+    css_final = read_text(styles)
+
+    if "UNIVERSAL SCROLLABLE COLLECTIONS" not in css_final:
+        fail("Universal scrollable-list CSS could not be verified.")
+
+    package_final = read_text(package_search)
+
+    if '<div className="package-results indefinite-list">' not in package_final:
+        fail("Package Search scroll container could not be verified.")
+
+    continuity_final = read_text(continuity)
+
+    if (
+        '<div className="continuity-section-body indefinite-list">'
+        not in continuity_final
+    ):
+        fail("Continuity section scrolling could not be verified.")
+
+    if (
+        '<div className="continuity-phase-list indefinite-list">'
+        not in continuity_final
+    ):
+        fail("Continuity phase-list scrolling could not be verified.")
+
+    print("\nSUCCESS")
     print("-------")
-    print("Continuity Viewer launcher integration repaired.")
-    print()
-    print("Foundation verified:")
-    print(f"  {EXPECTED_COMMIT}")
-    print()
-    print("Modified:")
-    print(f"  {app}")
-    print()
-    print("Behavior:")
-    print("  - Registered instance modules are discovered.")
-    print("  - Registered modules are merged into Home modules.")
-    print("  - Existing localStorage modules are preserved.")
-    print("  - Existing modules are not duplicated.")
-    print("  - Continuity Viewer should now appear in the launcher.")
-    print("  - Future instance modules can use the same mechanism.")
-    print()
-    print("Backup:")
-    print(f"  {backup}")
-    print()
-    print("WebApp-2 source code was modified successfully.")
+    print("Universal indefinite-list scrolling support added.")
+
+    print("\nBehavior:")
+    print("  - Potentially unbounded collections remain fixed-height.")
+    print("  - Items are accessed through internal scrolling.")
+    print("  - Package Search results now scroll instead of expanding.")
+    print("  - Continuity collections now use the same behavior.")
+    print("  - Existing Software Inventory scrolling is preserved.")
+    print("  - Future indefinite collections can use:")
+    print("      className=\"indefinite-list\"")
+    print("  - No items are discarded or artificially limited.")
+    print("  - The surrounding panel does not grow indefinitely.")
+
+    if changes:
+        print("\nModified:")
+        for item in changes:
+            print(f"  {item}")
+
+    if backups:
+        print("\nBackups:")
+        for item in backups:
+            print(f"  {item}")
+
+    print("\nWebApp-2 source code was modified successfully.")
 
 
 if __name__ == "__main__":
