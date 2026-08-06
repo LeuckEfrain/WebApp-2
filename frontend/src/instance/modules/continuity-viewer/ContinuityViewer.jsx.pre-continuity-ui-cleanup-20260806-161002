@@ -316,49 +316,69 @@ function Section({
                                                             {index + 1}
                                                         </span>
 
-                                                        <button
-                                                            type="button"
-                                                            className={
-                                                                'continuity-phase-status-control' +
-                                                                (state.active
-                                                                    ? ' active'
-                                                                    : '') +
-                                                                (state.complete
-                                                                    ? ' complete'
-                                                                    : '')
-                                                            }
-                                                            onClick={() =>
-                                                                cyclePhaseState(
-                                                                    goal.id,
-                                                                    index
-                                                                )
-                                                            }
-                                                            aria-label={
-                                                                `Phase ${index + 1} status: ` +
-                                                                (
-                                                                    state.active
-                                                                        ? 'Active'
-                                                                        : state.complete
-                                                                            ? 'Complete'
-                                                                            : 'Neither'
-                                                                )
-                                                            }
-                                                        >
-                                                            {state.active
-                                                                ? 'Active'
-                                                                : state.complete
-                                                                    ? 'Complete'
-                                                                    : 'Neither'}
-                                                        </button>
-
                                                         <div className="continuity-phase-main">
                                                             <div className="continuity-phase-title">
                                                                 <span>
                                                                     Phase {index + 1}
                                                                 </span>
+
                                                                 <strong>
                                                                     {phase}
                                                                 </strong>
+
+                                                                {neither && (
+                                                                    <span className="continuity-status">
+                                                                        Neither
+                                                                    </span>
+                                                                )}
+
+                                                                {state.active && (
+                                                                    <span className="continuity-status">
+                                                                        Active
+                                                                    </span>
+                                                                )}
+
+                                                                {state.complete && (
+                                                                    <span className="continuity-status">
+                                                                        Complete
+                                                                    </span>
+                                                                )}
+                                                            </div>
+
+                                                            <div className="continuity-phase-status-controls">
+                                                                <label>
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={
+                                                                            state.active
+                                                                        }
+                                                                        onChange={() =>
+                                                                            onPhaseStateChange(
+                                                                                goal.id,
+                                                                                index,
+                                                                                'active'
+                                                                            )
+                                                                        }
+                                                                    />
+                                                                    Active
+                                                                </label>
+
+                                                                <label>
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={
+                                                                            state.complete
+                                                                        }
+                                                                        onChange={() =>
+                                                                            onPhaseStateChange(
+                                                                                goal.id,
+                                                                                index,
+                                                                                'complete'
+                                                                            )
+                                                                        }
+                                                                    />
+                                                                    Complete
+                                                                </label>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -552,36 +572,6 @@ function ContinuityViewer() {
 
             return next;
         });
-    };
-
-    const cyclePhaseState = (
-        goalId,
-        phaseIndex
-    ) => {
-        const state = getPhaseState(
-            goalId,
-            phaseIndex
-        );
-
-        if (!state.active && !state.complete) {
-            setPhaseState(
-                goalId,
-                phaseIndex,
-                'active'
-            );
-        } else if (state.active) {
-            setPhaseState(
-                goalId,
-                phaseIndex,
-                'complete'
-            );
-        } else {
-            setPhaseState(
-                goalId,
-                phaseIndex,
-                'complete'
-            );
-        }
     };
 
     const openAll = () => {
