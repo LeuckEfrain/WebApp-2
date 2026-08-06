@@ -1,5 +1,3 @@
-import ContinuityViewer from './modules/continuity-viewer/ContinuityViewer';
-
 /*
  * WebApp-2 Instance Module Registry
  *
@@ -34,18 +32,4 @@ export function saveInstalledModules(modules) {
         STORAGE_KEY,
         JSON.stringify(modules)
     );
-}
-
-
-export const INSTANCE_MODULE_DEFINITIONS = [
-    {
-        id: 'continuity-viewer',
-        name: 'Continuity',
-        icon: 'C',
-        component: ContinuityViewer
-    }
-];
-
-export function getInstanceModuleDefinitions() {
-    return INSTANCE_MODULE_DEFINITIONS;
 }

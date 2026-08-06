@@ -1,0 +1,419 @@
+import { useMemo, useState } from 'react';
+
+const CONTINUITY_SECTIONS = [
+    {
+        id: 'vision',
+        title: 'Project Vision',
+        description:
+            'The overall purpose and intended interaction model of WebApp-2.',
+        content: [
+            'WebApp-2 is a modular personal web application environment with a PlayStation-inspired launcher/home-screen experience.',
+            'The Home environment is separate from the Settings/system interface.',
+            'The launcher is intended to scale in two dimensions and support context-specific applications.'
+        ]
+    },
+    {
+        id: 'protocols',
+        title: 'Protocols',
+        items: [
+            {
+                title: 'modify_frontend.py',
+                body:
+                    'Codebase changes should normally be implemented through an automated modify_frontend.py script rather than manual source editing.'
+            },
+            {
+                title: 'Modularization',
+                body:
+                    'The project should be checked for architectural monoliths and modularized proactively when appropriate.'
+            },
+            {
+                title: 'Resource Efficiency',
+                body:
+                    'Avoid unnecessary tool use, processing, data analysis, or other resource-heavy work.'
+            },
+            {
+                title: 'Git / Repository',
+                body:
+                    'Development should be anchored to explicit Git commits and the actual repository foundation.'
+            },
+            {
+                title: 'Backup',
+                body:
+                    'Automated source modifications should create safe backups before overwriting existing files.'
+            },
+            {
+                title: 'Continuity',
+                body:
+                    'The project-state document must remain portable and current so development can resume in another conversation.'
+            }
+        ]
+    },
+    {
+        id: 'goals',
+        title: 'Goals',
+        goals: [
+            {
+                id: 'launcher',
+                title: 'Home Launcher',
+                status: 'Active',
+                phases: [
+                    'Home shell',
+                    'Horizontal carousel',
+                    'Vertical row navigation',
+                    'Data-driven launcher'
+                ]
+            },
+            {
+                id: 'module-architecture',
+                title: 'Instance-Local Module Architecture',
+                status: 'Active',
+                phases: [
+                    'Separate core environment from installed modules',
+                    'Maintain instance registry',
+                    'Preserve modules through core updates',
+                    'Support independently installed module software'
+                ]
+            },
+            {
+                id: 'settings',
+                title: 'Settings / System Environment',
+                status: 'Active',
+                phases: [
+                    'Package manager',
+                    'Module management',
+                    'Appearance configuration',
+                    'Additional system functionality'
+                ]
+            }
+        ]
+    },
+    {
+        id: 'architecture',
+        title: 'Architecture',
+        items: [
+            {
+                title: 'WebApp-2 Core',
+                body:
+                    'The universal environment: Home, Launcher, Settings, Module Manager, and core interfaces.'
+            },
+            {
+                title: 'Instance-Level Software',
+                body:
+                    'Installed and user-created modules belong to the individual WebApp-2 instance and should not be hard-coded into the universal core.'
+            },
+            {
+                title: 'Instance Registry',
+                body:
+                    'Stores installed/configured module state belonging to the current WebApp-2 instance.'
+            }
+        ]
+    },
+    {
+        id: 'phases',
+        title: 'Development Phases',
+        phases: [
+            {
+                title: 'Phase 1 — Home Shell',
+                status: 'Complete',
+                body:
+                    'Separate Home from Settings, establish the top bar, Settings control, and launcher area.'
+            },
+            {
+                title: 'Phase 2 — Horizontal Carousel',
+                status: 'Next',
+                body:
+                    'Implement horizontal movement, fixed selection reference, animation, keyboard navigation, mouse navigation, and sound.'
+            },
+            {
+                title: 'Phase 3 — Vertical Row Navigation',
+                status: 'Planned',
+                body:
+                    'Add vertically stacked launcher rows with hidden rows above and below the active row.'
+            },
+            {
+                title: 'Phase 4 — Data-Driven Launcher',
+                status: 'Planned',
+                body:
+                    'Allow launcher applications to be represented and configured through module data.'
+            },
+            {
+                title: 'Phase 5 — Existing System Behind Settings',
+                status: 'Continuing',
+                body:
+                    'Keep package management, module management, appearance, and related system functionality behind Settings.'
+            }
+        ]
+    }
+];
+
+
+function Section({ section, open, onToggle, activeGoal, onGoalSelect }) {
+    return (
+        <section className="continuity-section">
+            <button
+                type="button"
+                className="continuity-section-header"
+                onClick={onToggle}
+                aria-expanded={open}
+            >
+                <span className="continuity-section-title">
+                    {section.title}
+                </span>
+
+                <span className="continuity-section-toggle">
+                    {open ? '−' : '+'}
+                </span>
+            </button>
+
+            {open && (
+                <div className="continuity-section-body">
+                    {section.description && (
+                        <p className="continuity-description">
+                            {section.description}
+                        </p>
+                    )}
+
+                    {section.content?.map(item => (
+                        <div
+                            className="continuity-detail"
+                            key={item}
+                        >
+                            {item}
+                        </div>
+                    ))}
+
+                    {section.items?.map(item => (
+                        <article
+                            className="continuity-item"
+                            key={item.title}
+                        >
+                            <strong>{item.title}</strong>
+                            <p>{item.body}</p>
+                        </article>
+                    ))}
+
+                    {section.goals?.map(goal => {
+                        const selected =
+                            activeGoal === goal.id;
+
+                        return (
+                            <article
+                                className={
+                                    'continuity-goal' +
+                                    (selected
+                                        ? ' active'
+                                        : '')
+                                }
+                                key={goal.id}
+                            >
+                                <div className="continuity-goal-header">
+                                    <div>
+                                        <strong>{goal.title}</strong>
+                                        <span className="continuity-status">
+                                            {goal.status}
+                                        </span>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        className={
+                                            selected
+                                                ? 'secondary'
+                                                : 'primary'
+                                        }
+                                        onClick={() =>
+                                            onGoalSelect(
+                                                selected
+                                                    ? null
+                                                    : goal.id
+                                            )
+                                        }
+                                    >
+                                        {selected
+                                            ? 'Active Goal'
+                                            : 'Set Active'}
+                                    </button>
+                                </div>
+
+                                <div className="continuity-phase-list">
+                                    {goal.phases.map(
+                                        (phase, index) => (
+                                            <div
+                                                className="continuity-phase"
+                                                key={phase}
+                                            >
+                                                <span>
+                                                    {index + 1}
+                                                </span>
+                                                <div>
+                                                    Phase {index + 1}
+                                                    <strong>
+                                                        {phase}
+                                                    </strong>
+                                                </div>
+                                            </div>
+                                        )
+                                    )}
+                                </div>
+                            </article>
+                        );
+                    })}
+
+                    {section.phases?.map(phase => (
+                        <article
+                            className="continuity-phase-card"
+                            key={phase.title}
+                        >
+                            <div className="continuity-phase-card-head">
+                                <strong>{phase.title}</strong>
+                                <span className="continuity-status">
+                                    {phase.status}
+                                </span>
+                            </div>
+
+                            <p>{phase.body}</p>
+                        </article>
+                    ))}
+                </div>
+            )}
+        </section>
+    );
+}
+
+
+function ContinuityViewer() {
+    const [openSections, setOpenSections] = useState(
+        () => new Set(['goals'])
+    );
+
+    const [activeGoal, setActiveGoal] = useState(
+        () =>
+            localStorage.getItem(
+                'webapp2-continuity-active-goal'
+            ) || null
+    );
+
+    const visibleCount = useMemo(
+        () => openSections.size,
+        [openSections]
+    );
+
+    const toggleSection = id => {
+        setOpenSections(current => {
+            const next = new Set(current);
+
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+
+            return next;
+        });
+    };
+
+    const selectGoal = id => {
+        setActiveGoal(id);
+
+        if (id) {
+            localStorage.setItem(
+                'webapp2-continuity-active-goal',
+                id
+            );
+        } else {
+            localStorage.removeItem(
+                'webapp2-continuity-active-goal'
+            );
+        }
+    };
+
+    const openAll = () => {
+        setOpenSections(
+            new Set(
+                CONTINUITY_SECTIONS.map(
+                    section => section.id
+                )
+            )
+        );
+    };
+
+    const closeAll = () => {
+        setOpenSections(new Set());
+    };
+
+    return (
+        <div className="continuity-viewer">
+            <div className="continuity-toolbar">
+                <div>
+                    <div className="eyebrow">
+                        INSTANCE MODULE
+                    </div>
+
+                    <h2>Continuity</h2>
+
+                    <p>
+                        Navigate the active WebApp-2 project
+                        state without reading the raw document.
+                    </p>
+                </div>
+
+                <div className="continuity-toolbar-actions">
+                    <button
+                        type="button"
+                        className="secondary"
+                        onClick={openAll}
+                    >
+                        Open All
+                    </button>
+
+                    <button
+                        type="button"
+                        className="secondary"
+                        onClick={closeAll}
+                    >
+                        Close All
+                    </button>
+                </div>
+            </div>
+
+            <div className="continuity-summary">
+                <div>
+                    <span>OPEN SECTIONS</span>
+                    <strong>{visibleCount}</strong>
+                </div>
+
+                <div>
+                    <span>ACTIVE GOAL</span>
+                    <strong>
+                        {activeGoal
+                            ? 'Selected'
+                            : 'None'}
+                    </strong>
+                </div>
+
+                <div>
+                    <span>MODULE TYPE</span>
+                    <strong>INSTANCE</strong>
+                </div>
+            </div>
+
+            <div className="continuity-sections">
+                {CONTINUITY_SECTIONS.map(section => (
+                    <Section
+                        key={section.id}
+                        section={section}
+                        open={openSections.has(section.id)}
+                        onToggle={() =>
+                            toggleSection(section.id)
+                        }
+                        activeGoal={activeGoal}
+                        onGoalSelect={selectGoal}
+                    />
+                ))}
+            </div>
+        </div>
+    );
+}
+
+
+export default ContinuityViewer;

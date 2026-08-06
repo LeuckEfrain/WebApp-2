@@ -5,7 +5,6 @@ import React, {
 
 import Home from './components/home/Home';
 import Settings from './components/settings/Settings';
-import { getInstanceModuleDefinitions } from '../instance/moduleRegistry';
 
 
 const API = 'http://127.0.0.1:8000';
@@ -122,52 +121,11 @@ function App() {
                     setView('settings')
                 }
                 modules={modules}
-                onOpenModule={moduleId => {
-                    if (moduleId === 'continuity-viewer') {
-                        setView('module');
-                    }
-                }}
             />
         );
 
     }
 
-
-    if (view === 'module') {
-        const definitions =
-            getInstanceModuleDefinitions();
-
-        const continuity =
-            definitions.find(
-                module =>
-                    module.id === 'continuity-viewer'
-            );
-
-        if (!continuity) {
-            return null;
-        }
-
-        const ModuleComponent =
-            continuity.component;
-
-        return (
-            <div className="shell">
-                <main className="main">
-                    <button
-                        type="button"
-                        className="settings-home-button"
-                        onClick={() =>
-                            setView('home')
-                        }
-                    >
-                        ← Home
-                    </button>
-
-                    <ModuleComponent />
-                </main>
-            </div>
-        );
-    }
 
     return (
         <Settings

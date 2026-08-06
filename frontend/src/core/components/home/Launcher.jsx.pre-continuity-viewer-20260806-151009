@@ -4,7 +4,7 @@ import { playSound } from '../../audio/audioManager';
 
 const INITIAL_SELECTED_POSITION = 1;
 
-function Launcher({ modules, onOpenModule }) {
+function Launcher({ modules }) {
     const enabledModules = modules.filter(
         module => module.enabled
     );
@@ -63,19 +63,6 @@ function Launcher({ modules, onOpenModule }) {
                 key === 'd'
             ) {
                 event.preventDefault();
-                moveHorizontal(1);
-                return;
-            }
-
-            if (
-                key === 'enter' ||
-                key === ' '
-            ) {
-                event.preventDefault();
-
-                if (selectedModule && onOpenModule) {
-                    onOpenModule(selectedModule.id);
-                }
             }
         };
 
@@ -103,13 +90,6 @@ function Launcher({ modules, onOpenModule }) {
 
         if (index > selectedIndex) {
             moveHorizontal(1);
-            return;
-        }
-
-        const module = enabledModules[index];
-
-        if (module && onOpenModule) {
-            onOpenModule(module.id);
         }
     };
 
