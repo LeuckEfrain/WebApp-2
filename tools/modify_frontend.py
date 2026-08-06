@@ -1,36 +1,11 @@
 from pathlib import Path
-import re
 import shutil
-import subprocess
 import sys
 
 
 # ============================================================
-# WebApp-2
-# Phase 2 — LauncherCard repair
-#
-# Repairs the specific state where:
-#
-#     onClick={onClick}
-#
-# exists inside LauncherCard, but `onClick` is missing from
-# the component's destructured props.
-#
-# No other carousel behavior is changed.
+# Helpers
 # ============================================================
-
-
-ROOT = Path.cwd()
-
-LAUNCHER_CARD = (
-    ROOT
-    / "frontend"
-    / "src"
-    / "components"
-    / "home"
-    / "LauncherCard.jsx"
-)
-
 
 def fail(message):
     print()
@@ -38,277 +13,536 @@ def fail(message):
     print("-----")
     print(message)
     print()
+    print("No further changes were made by this script.")
     sys.exit(1)
 
 
-def get_commit():
-    try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "HEAD"],
-            cwd=ROOT,
-            text=True,
-            stderr=subprocess.DEVNULL,
-        ).strip()
-    except Exception:
-        return None
-
-
-def verify_project():
-    if not LAUNCHER_CARD.exists():
+def ensure_exists(path, description):
+    if not path.exists():
         fail(
-            "LauncherCard.jsx was not found:\n\n"
-            f"{LAUNCHER_CARD}\n\n"
-            "Run this script from the WebApp-2 repository root."
+            f"Expected {description} does not exist:\n"
+            f"  {path}"
         )
 
 
-def create_backup():
-    backup = LAUNCHER_CARD.with_name(
-        "LauncherCard.jsx.pre-onclick-repair"
-    )
+def is_empty_directory(path):
+    return path.exists() and path.is_dir() and not any(path.iterdir())
 
-    if backup.exists():
+
+def backup_file(path, backup_root, project_root):
+    if not path.exists() or not path.is_file():
+        return
+
+    relative = path.relative_to(project_root)
+    destination = backup_root / relative
+
+    if destination.exists():
+        return
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(path, destination)
+
+
+def safe_move_directory_contents(source, destination):
+    """
+    Safely move contents from source into destination.
+
+    The destination is allowed to already exist if it is empty.
+    Existing files are never overwritten.
+    """
+
+    if not source.exists():
+        return
+
+    if not source.is_dir():
         fail(
-            "A repair backup already exists:\n\n"
-            f"{backup}\n\n"
+            "Expected directory but found something else:\n"
+            f"  {source}"
+        )
+
+    destination.mkdir(parents=True, exist_ok=True)
+
+    for item in list(source.iterdir()):
+        target = destination / item.name
+
+        if target.exists():
+            fail(
+                "Destination collision detected:\n"
+                f"  Source:      {item}\n"
+                f"  Destination: {target}\n\n"
+                "The script will not overwrite either file."
+            )
+
+        shutil.move(str(item), str(target))
+
+
+def safe_move_file(source, destination):
+    if not source.exists():
+        return
+
+    if destination.exists():
+        fail(
+            "Destination file already exists:\n"
+            f"  Source:      {source}\n"
+            f"  Destination: {destination}\n\n"
             "The script will not overwrite it."
         )
 
-    shutil.copy2(
-        LAUNCHER_CARD,
-        backup
-    )
-
-    print("Backup created:")
-    print(f"  {backup}")
-
-    return backup
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(source), str(destination))
 
 
-def repair():
-    source = LAUNCHER_CARD.read_text(
-        encoding="utf-8"
-    )
-
-
-    # --------------------------------------------------------
-    # First determine whether the problem actually exists.
-    # --------------------------------------------------------
-
-    has_click_handler = (
-        "onClick={onClick}" in source
-    )
-
-    if not has_click_handler:
+def replace_required(text, old, new, filename):
+    if old not in text:
         fail(
-            "LauncherCard.jsx does not contain "
-            "`onClick={onClick}`.\n\n"
-            "This repair is therefore not applicable."
+            f"Could not find the expected code in:\n"
+            f"  {filename}\n\n"
+            f"Expected:\n{old}"
         )
 
-
-    # --------------------------------------------------------
-    # Find the LauncherCard function declaration.
-    #
-    # This deliberately allows whitespace/newlines so that
-    # formatting changes don't break the repair.
-    # --------------------------------------------------------
-
-    pattern = re.compile(
-        r"""
-        function
-        \s+
-        LauncherCard
-        \s*
-        \(
-        \s*
-        \{
-        (?P<props>.*?)
-        \}
-        \s*
-        \)
-        """,
-        re.DOTALL | re.VERBOSE,
-    )
+    return text.replace(old, new, 1)
 
 
-    match = pattern.search(source)
-
-    if not match:
-        fail(
-            "Could not safely locate the LauncherCard "
-            "function declaration.\n\n"
-            "No files were changed."
-        )
-
-
-    props = match.group("props")
-
-
-    # --------------------------------------------------------
-    # If onClick is already declared, the JavaScript source
-    # itself is not the problem.
-    # --------------------------------------------------------
-
-    if re.search(
-        r"\bonClick\b",
-        props
-    ):
-        print()
-        print(
-            "LauncherCard already declares onClick "
-            "in its props."
-        )
-        print()
-        print(
-            "The reported browser error may be coming "
-            "from a stale Vite/HMR module."
-        )
-        print()
-        return False
-
-
-    # --------------------------------------------------------
-    # Preserve the existing props and append onClick.
-    # --------------------------------------------------------
-
-    cleaned_props = props.strip()
-
-
-    if cleaned_props:
-        new_props = (
-            cleaned_props.rstrip()
-            + ", onClick"
-        )
-    else:
-        new_props = "onClick"
-
-
-    replacement = (
-        "function LauncherCard({ "
-        + new_props
-        + " })"
-    )
-
-
-    updated = (
-        source[:match.start()]
-        + replacement
-        + source[match.end():]
-    )
-
-
-    # --------------------------------------------------------
-    # Verify BEFORE writing.
-    # --------------------------------------------------------
-
-    verification = re.search(
-        r"""
-        function
-        \s+
-        LauncherCard
-        \s*
-        \(
-        \s*
-        \{
-        (?P<props>.*?\bonClick\b.*?)
-        \}
-        \s*
-        \)
-        """,
-        updated,
-        re.DOTALL | re.VERBOSE,
-    )
-
-
-    if not verification:
-        fail(
-            "The repair could not be verified before "
-            "writing the file.\n\n"
-            "No files were changed."
-        )
-
-
-    # Make sure the click handler still exists too.
-    if "onClick={onClick}" not in updated:
-        fail(
-            "The resulting file does not contain the "
-            "expected click handler.\n\n"
-            "No files were changed."
-        )
-
-
-    LAUNCHER_CARD.write_text(
-        updated,
-        encoding="utf-8"
-    )
-
-    return True
-
+# ============================================================
+# Main
+# ============================================================
 
 def main():
 
+    project_root = Path(__file__).resolve().parent.parent
+
+    frontend = project_root / "frontend"
+    src = frontend / "src"
+
+    if not src.exists():
+        fail(
+            "Could not locate frontend/src.\n\n"
+            f"Expected:\n  {src}"
+        )
+
+    print("WebApp-2 Core / Instance Architecture")
+    print("======================================")
     print()
-    print("==============================================")
-    print(" WebApp-2")
-    print(" LauncherCard onClick Repair")
-    print("==============================================")
+    print(f"Project root:")
+    print(f"  {project_root}")
     print()
 
-    verify_project()
+    # --------------------------------------------------------
+    # Expected current state
+    # --------------------------------------------------------
 
-    commit = get_commit()
+    core = src / "core"
+    core_components = core / "components"
+    instance = src / "instance"
 
-    if commit:
-        print(f"Current commit: {commit}")
+    ensure_exists(core / "App.jsx", "core/App.jsx")
 
+    ensure_exists(
+        core_components / "home" / "Home.jsx",
+        "core/components/home/Home.jsx"
+    )
+
+    ensure_exists(
+        core_components / "home" / "Launcher.jsx",
+        "core/components/home/Launcher.jsx"
+    )
+
+    ensure_exists(
+        core_components / "home" / "LauncherCard.jsx",
+        "core/components/home/LauncherCard.jsx"
+    )
+
+    ensure_exists(
+        core_components / "settings" / "Settings.jsx",
+        "core/components/settings/Settings.jsx"
+    )
+
+    ensure_exists(
+        core_components / "settings" / "ModuleSettings.jsx",
+        "core/components/settings/ModuleSettings.jsx"
+    )
+
+    ensure_exists(
+        src / "audio" / "audioManager.js",
+        "src/audio/audioManager.js"
+    )
+
+    ensure_exists(
+        src / "modules" / "package-manager",
+        "src/modules/package-manager"
+    )
+
+    ensure_exists(
+        src / "styles.css",
+        "src/styles.css"
+    )
+
+    ensure_exists(
+        src / "main.jsx",
+        "src/main.jsx"
+    )
+
+    instance.mkdir(parents=True, exist_ok=True)
+
+    # --------------------------------------------------------
+    # Backup current files that will be changed
+    # --------------------------------------------------------
+
+    backup_root = (
+        project_root
+        / "backups"
+        / "core-instance-architecture"
+    )
+
+    backup_root.mkdir(parents=True, exist_ok=True)
+
+    print("Creating safety backups...")
+
+    files_to_backup = [
+        core / "App.jsx",
+        core_components / "home" / "Home.jsx",
+        core_components / "home" / "Launcher.jsx",
+        core_components / "home" / "LauncherCard.jsx",
+        core_components / "settings" / "Settings.jsx",
+        core_components / "settings" / "ModuleSettings.jsx",
+        src / "main.jsx",
+        src / "styles.css",
+        src / "audio" / "audioManager.js",
+    ]
+
+    for path in files_to_backup:
+        backup_file(
+            path,
+            backup_root,
+            project_root
+        )
+
+    print(f"Backup location:")
+    print(f"  {backup_root}")
     print()
 
-    backup = create_backup()
+    # --------------------------------------------------------
+    # Move Audio into Core
+    # --------------------------------------------------------
+
+    print("Moving generic audio infrastructure...")
+
+    core_audio = core / "audio"
+    core_audio.mkdir(parents=True, exist_ok=True)
+
+    safe_move_directory_contents(
+        src / "audio",
+        core_audio
+    )
+
+    # --------------------------------------------------------
+    # Move Package Manager into Core
+    # --------------------------------------------------------
+
+    print("Moving generic package-manager infrastructure...")
+
+    core_modules = core / "modules"
+    core_modules.mkdir(parents=True, exist_ok=True)
+
+    package_manager_destination = (
+        core_modules / "package-manager"
+    )
+
+    if package_manager_destination.exists():
+        if not is_empty_directory(package_manager_destination):
+            fail(
+                "Core package-manager destination already contains "
+                "files:\n"
+                f"  {package_manager_destination}\n\n"
+                "Refusing to overwrite it."
+            )
+
+    safe_move_directory_contents(
+        src / "modules" / "package-manager",
+        package_manager_destination
+    )
+
+    # Remove empty old module directory if possible.
+    old_package_manager = src / "modules" / "package-manager"
 
     try:
-        changed = repair()
+        old_package_manager.rmdir()
+    except OSError:
+        pass
 
-    except Exception as error:
+    try:
+        (src / "modules").rmdir()
+    except OSError:
+        pass
 
-        print()
-        print(
-            "Repair failed. Restoring backup..."
+    # --------------------------------------------------------
+    # Move stylesheet into Core
+    # --------------------------------------------------------
+
+    print("Moving generic stylesheet...")
+
+    safe_move_file(
+        src / "styles.css",
+        core / "styles.css"
+    )
+
+    # --------------------------------------------------------
+    # Create instance-local module registry
+    # --------------------------------------------------------
+
+    registry = instance / "moduleRegistry.js"
+
+    if registry.exists():
+        print("Preserving existing instance/moduleRegistry.js")
+    else:
+        print("Creating instance/moduleRegistry.js")
+
+        registry.write_text(
+            """/*
+ * WebApp-2 Instance Module Registry
+ *
+ * This file represents the installed/configured software
+ * belonging to this particular WebApp-2 instance.
+ *
+ * It is NOT part of WebApp-2 core.
+ */
+
+const STORAGE_KEY = 'webapp2-instance-modules';
+
+export function loadInstalledModules() {
+    try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+
+        if (!saved) {
+            return [];
+        }
+
+        const parsed = JSON.parse(saved);
+
+        return Array.isArray(parsed)
+            ? parsed
+            : [];
+    } catch {
+        return [];
+    }
+}
+
+export function saveInstalledModules(modules) {
+    localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(modules)
+    );
+}
+""",
+            encoding="utf-8"
         )
 
-        shutil.copy2(
-            backup,
-            LAUNCHER_CARD
+    # --------------------------------------------------------
+    # Create instance-local preferences
+    # --------------------------------------------------------
+
+    preferences = instance / "preferences.js"
+
+    if preferences.exists():
+        print("Preserving existing instance/preferences.js")
+    else:
+        print("Creating instance/preferences.js")
+
+        preferences.write_text(
+            """/*
+ * WebApp-2 Instance Preferences
+ *
+ * Preferences belong to the individual WebApp-2 instance.
+ */
+
+const PREFIX = 'webapp2-instance:';
+
+export function loadPreference(key, fallback = null) {
+    const value = localStorage.getItem(
+        PREFIX + key
+    );
+
+    return value === null
+        ? fallback
+        : value;
+}
+
+export function savePreference(key, value) {
+    localStorage.setItem(
+        PREFIX + key,
+        String(value)
+    );
+}
+""",
+            encoding="utf-8"
         )
 
+    # --------------------------------------------------------
+    # Update main.jsx
+    # --------------------------------------------------------
+
+    print("Updating main.jsx...")
+
+    main = src / "main.jsx"
+    main_text = main.read_text(encoding="utf-8")
+
+    if "from './core/App'" not in main_text:
+        main_text = main_text.replace(
+            "from './components/App'",
+            "from './core/App'"
+        )
+
+    if "from './core/styles.css'" not in main_text:
+        main_text = main_text.replace(
+            "import './styles.css'",
+            "import './core/styles.css'"
+        )
+
+    main.write_text(
+        main_text,
+        encoding="utf-8"
+    )
+
+    # --------------------------------------------------------
+    # Update App.jsx path references
+    # --------------------------------------------------------
+
+    print("Checking core/App.jsx imports...")
+
+    app = core / "App.jsx"
+    app_text = app.read_text(encoding="utf-8")
+
+    # Because App.jsx now lives in core/, paths to the core
+    # component tree should be ./components/...
+    replacements = {
+        "./home/Home": "./components/home/Home",
+        "./settings/Settings": "./components/settings/Settings",
+        "./audio/audioManager": "./audio/audioManager",
+        "./modules/package-manager": "./modules/package-manager",
+    }
+
+    for old, new in replacements.items():
+        app_text = app_text.replace(old, new)
+
+    app.write_text(
+        app_text,
+        encoding="utf-8"
+    )
+
+    # --------------------------------------------------------
+    # Update imports inside moved components
+    # --------------------------------------------------------
+
+    moved_files = list(core_components.rglob("*.jsx"))
+
+    for file in moved_files:
+        text = file.read_text(encoding="utf-8")
+
+        # These are conservative path corrections only.
+        # We do not rewrite arbitrary imports.
+
+        text = text.replace(
+            "../home/",
+            "../home/"
+        )
+
+        text = text.replace(
+            "../settings/",
+            "../settings/"
+        )
+
+        file.write_text(
+            text,
+            encoding="utf-8"
+        )
+
+    # --------------------------------------------------------
+    # Verify resulting structure
+    # --------------------------------------------------------
+
+    print()
+    print("Verifying architecture...")
+    print()
+
+    expected_paths = [
+        core / "App.jsx",
+        core / "styles.css",
+        core / "audio" / "audioManager.js",
+        core / "modules" / "package-manager",
+        core_components / "home" / "Home.jsx",
+        core_components / "home" / "Launcher.jsx",
+        core_components / "home" / "LauncherCard.jsx",
+        core_components / "settings" / "Settings.jsx",
+        core_components / "settings" / "ModuleSettings.jsx",
+        instance / "moduleRegistry.js",
+        instance / "preferences.js",
+        src / "main.jsx",
+    ]
+
+    for path in expected_paths:
+        if not path.exists():
+            fail(
+                "Architecture verification failed.\n\n"
+                f"Missing:\n  {path}"
+            )
+
+    # Verify old application directories are gone.
+    old_audio = src / "audio"
+    old_modules = src / "modules"
+
+    if old_audio.exists() and any(old_audio.iterdir()):
         fail(
-            f"Repair was rolled back.\n\n{error}"
+            "Old audio directory still contains files:\n"
+            f"  {old_audio}"
         )
 
+    if old_modules.exists() and any(old_modules.iterdir()):
+        fail(
+            "Old modules directory still contains files:\n"
+            f"  {old_modules}"
+        )
 
-    if not changed:
-        return
+    # --------------------------------------------------------
+    # Final report
+    # --------------------------------------------------------
 
-
+    print("SUCCESS")
+    print("=======")
     print()
-    print("==============================================")
-    print(" REPAIR COMPLETE")
-    print("==============================================")
+    print("Core / Instance architecture has been established.")
     print()
+    print("CORE")
+    print("----")
+    print("frontend/src/core/")
+    print("  App.jsx")
+    print("  styles.css")
+    print("  audio/")
+    print("  components/")
+    print("  modules/")
+    print()
+    print("INSTANCE")
+    print("--------")
+    print("frontend/src/instance/")
+    print("  moduleRegistry.js")
+    print("  preferences.js")
+    print()
+    print("INSTANCE SOFTWARE")
+    print("-----------------")
     print(
-        "LauncherCard now receives `onClick` "
-        "through its component props."
+        "Future user-installed modules belong to the "
+        "instance layer."
     )
     print()
+    print("PACKAGE MANAGER")
+    print("---------------")
     print(
-        "The specific `onClick is not defined` "
-        "ReferenceError has been repaired."
+        "The package-manager capability remains Core; "
+        "future installed software remains instance-local."
     )
     print()
-    print(
-        "Refresh the browser and test the homepage."
-    )
-    print()
+    print("IMPORTANT:")
+    print("Test the application before committing.")
+    print("Do not commit yet.")
 
 
 if __name__ == "__main__":

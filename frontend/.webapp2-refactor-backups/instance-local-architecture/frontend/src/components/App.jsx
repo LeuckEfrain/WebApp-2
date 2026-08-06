@@ -1,0 +1,156 @@
+import React, {
+    useEffect,
+    useState
+} from 'react';
+
+import Home from './home/Home';
+import Settings from './settings/Settings';
+
+
+const API = 'http://127.0.0.1:8000';
+
+
+const DEFAULT_HOME_MODULES = [
+    {
+        id: 'gmail-analyzer',
+        name: 'Gmail Analyzer',
+        icon: 'G',
+        enabled: true
+    },
+    {
+        id: 'git-tools',
+        name: 'Git Tools',
+        icon: 'G',
+        enabled: true
+    }
+];
+
+
+function App() {
+
+    const [view, setView] = useState('home');
+
+    const [page, setPage] = useState('dashboard');
+
+    const [managers, setManagers] = useState([]);
+
+
+    const [modules, setModules] = useState(() => {
+
+        try {
+
+            const saved =
+                localStorage.getItem('home-modules');
+
+            if (saved) {
+                return JSON.parse(saved);
+            }
+
+        } catch {
+            // Fall back to defaults.
+        }
+
+        return DEFAULT_HOME_MODULES;
+
+    });
+
+
+    const [theme, setTheme] = useState(() => (
+        localStorage.getItem('modular-theme')
+        || 'obsidian'
+    ));
+
+
+    const [font, setFont] = useState(() => (
+        localStorage.getItem('modular-font')
+        || 'inter'
+    ));
+
+
+    useEffect(() => {
+
+        document.documentElement.dataset.theme =
+            theme;
+
+        localStorage.setItem(
+            'modular-theme',
+            theme
+        );
+
+    }, [theme]);
+
+
+    useEffect(() => {
+
+        document.documentElement.dataset.font =
+            font;
+
+        localStorage.setItem(
+            'modular-font',
+            font
+        );
+
+    }, [font]);
+
+
+    useEffect(() => {
+
+        localStorage.setItem(
+            'home-modules',
+            JSON.stringify(modules)
+        );
+
+    }, [modules]);
+
+
+    useEffect(() => {
+
+        fetch(API + '/api/package-managers')
+            .then(response => response.json())
+            .then(setManagers)
+            .catch(() => {});
+
+    }, []);
+
+
+    if (view === 'home') {
+
+        return (
+            <Home
+                onSettings={() =>
+                    setView('settings')
+                }
+                modules={modules}
+            />
+        );
+
+    }
+
+
+    return (
+        <Settings
+
+            page={page}
+            setPage={setPage}
+
+            managers={managers}
+
+            theme={theme}
+            setTheme={setTheme}
+
+            font={font}
+            setFont={setFont}
+
+            onHome={() =>
+                setView('home')
+            }
+
+            modules={modules}
+            setModules={setModules}
+
+        />
+    );
+}
+
+
+export default App;

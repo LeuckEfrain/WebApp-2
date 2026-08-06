@@ -1,0 +1,46 @@
+function LauncherCard({ module,
+    selected, onClick }) {
+
+    return (
+        <div
+            className={`launcher-card ${
+                selected
+                    ? 'launcher-card-selected'
+                    : ''
+            } ${
+                module.placeholder
+                    ? 'launcher-card-placeholder'
+                    : ''
+            }`}
+        >
+
+            <div
+            onClick={onClick}
+            className="launcher-card-icon">
+                {module.icon}
+            </div>
+
+
+            <div className="launcher-card-title">
+                {module.name}
+            </div>
+
+
+            {!module.placeholder && (
+
+                <div className="launcher-card-subtitle">
+
+                    {module.id === 'gmail-analyzer'
+                        ? 'Analyzer'
+                        : 'Tools'}
+
+                </div>
+
+            )}
+
+        </div>
+    );
+}
+
+
+export default LauncherCard;
