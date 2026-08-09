@@ -1,0 +1,146 @@
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import fs from 'node:fs';
+
+const CONTINUITY_FILE =
+    'D:/Projects/WebApps/continuity/webapp_2/webapp2_continuity.txt';
+
+
+function webapp2ContinuityDocument() {
+
+    return {
+        name: 'webapp2-continuity-document',
+
+        configureServer(server) {
+            server.middlewares.use(
+                '/__webapp2_continuity',
+                (req, res) => {
+                    try {
+                        const filePath =
+                            String.raw`D:\Projects\WebApps\continuity\webapp_2\webapp2_continuity.txt`;
+
+                        const content =
+                            fs.readFileSync(
+                                filePath,
+                                'utf-8'
+                            );
+
+                        res.statusCode = 200;
+                        res.setHeader(
+                            'Content-Type',
+                            'text/plain; charset=utf-8'
+                        );
+                        res.setHeader(
+                            'Cache-Control',
+                            'no-store'
+                        );
+
+                        res.end(content);
+                    } catch (error) {
+                        res.statusCode = 500;
+                        res.setHeader(
+                            'Content-Type',
+                            'text/plain; charset=utf-8'
+                        );
+
+                        res.end(
+                            `Unable to read authoritative continuity document.\n\n${error.message}`
+                        );
+                    }
+                }
+            );
+        }
+    };
+}
+
+export default defineConfig({
+    plugins: [
+
+        {
+            name: 'webapp2-external-continuity',
+            configureServer(server) {
+                server.middlewares.use(
+                    '/__webapp2_continuity__',
+                    async (req, res) => {
+                        const fs =
+                            await import('node:fs/promises');
+
+                        const filePath =
+                            'D:\\Projects\\WebApps\\continuity\\webapp_2\\webapp2_continuity.txt';
+
+                        try {
+                            const content =
+                                await fs.readFile(
+                                    filePath,
+                                    'utf8'
+                                );
+
+                            res.statusCode = 200;
+
+                            res.setHeader(
+                                'Content-Type',
+                                'text/plain; charset=utf-8'
+                            );
+
+                            res.end(content);
+                        } catch (error) {
+                            res.statusCode = 500;
+
+                            res.setHeader(
+                                'Content-Type',
+                                'text/plain; charset=utf-8'
+                            );
+
+                            res.end(
+                                `Unable to read continuity document: ${error.message}`
+                            );
+                        }
+                    }
+                );
+            }
+        }
+,
+        webapp2ContinuityDocument(),
+        react(),
+        {
+            name: 'webapp2-external-continuity',
+            configureServer(server) {
+                server.middlewares.use(
+                    '/continuity/webapp2_continuity.txt',
+                    (req, res, next) => {
+                        if (!fs.existsSync(CONTINUITY_FILE)) {
+                            res.statusCode = 404;
+                            res.end(
+                                'Authoritative continuity document not found.'
+                            );
+                            return;
+                        }
+
+                        try {
+                            const content = fs.readFileSync(
+                                CONTINUITY_FILE,
+                                'utf-8'
+                            );
+
+                            res.statusCode = 200;
+                            res.setHeader(
+                                'Content-Type',
+                                'text/plain; charset=utf-8'
+                            );
+                            res.setHeader(
+                                'Cache-Control',
+                                'no-store'
+                            );
+                            res.end(content);
+                        } catch (error) {
+                            res.statusCode = 500;
+                            res.end(
+                                `Unable to read continuity document.\n\n${error.message}`
+                            );
+                        }
+                    }
+                );
+            }
+        }
+    ]
+});

@@ -204,9 +204,13 @@ function ContinuityViewer() {
                         new Set(['goals'])
                     );
 
-                    // Do not overwrite the initial open state here.
-                    // Goals is intentionally opened after the authoritative
-                    // continuity data loads.
+                    setOpenSections(
+                        new Set(
+                            result.sections.map(
+                                section => section.id
+                            )
+                        )
+                    );
                 }
             } catch (error) {
                 if (!cancelled) {

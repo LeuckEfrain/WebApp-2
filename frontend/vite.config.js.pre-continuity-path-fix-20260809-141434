@@ -5,7 +5,6 @@ import path from 'node:path';
 
 const CONTINUITY_FILE = path.resolve(
     '..',
-    '..',
     'continuity',
     'webapp_2',
     'webapp2_continuity.txt'
@@ -72,11 +71,5 @@ export default defineConfig({
     plugins: [
         webapp2ContinuityDocument(),
         react()
-    ],
-    server: {
-        allowedHosts: [
-            'albums-dollars-veterinary-revisions.trycloudflare.com'
-        ]
-    }
-
+    ]
 });

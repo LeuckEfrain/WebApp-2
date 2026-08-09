@@ -171,7 +171,9 @@ function ContinuityViewer() {
         useState(null);
 
     const [openSections, setOpenSections] =
-        useState(new Set());
+        useState(
+            () => new Set(['goals'])
+        );
 
     const [activeGoal, setActiveGoal] =
         useState(
@@ -196,17 +198,6 @@ function ContinuityViewer() {
                     setContinuitySections(
                         result.sections
                     );
-
-                    // WEBAPP2_GOALS_OPEN_AFTER_LOAD
-                    // Open Goals after authoritative continuity data
-                    // has successfully loaded.
-                    setOpenSections(
-                        new Set(['goals'])
-                    );
-
-                    // Do not overwrite the initial open state here.
-                    // Goals is intentionally opened after the authoritative
-                    // continuity data loads.
                 }
             } catch (error) {
                 if (!cancelled) {

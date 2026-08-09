@@ -1,0 +1,1138 @@
+import { useMemo, useState } from 'react';
+
+/*
+ * WEBAPP2_CONTINUITY_RUNTIME_PARSER
+ *
+ * The Continuity UI remains the existing UI foundation.
+ *
+ * This parser supplies CONTINUITY_SECTIONS from the existing
+ * runtime continuity document rather than duplicating project
+ * state in the frontend source.
+ */
+
+const CONTINUITY_DOCUMENT_URL =
+    '/continuity/webapp2_continuity.txt';
+
+
+function getContinuityRevision(content) {
+    const match = content.match(
+        /Current Revision:\s*\n\s*(\d+)/
+    );
+
+    return match ? match[1] : null;
+}
+
+
+function cleanDocumentLine(line) {
+    return line
+        .replace(/\r/g, '')
+        .trim();
+}
+
+
+function slugify(value) {
+    return value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
+
+
+function normalizeSectionTitle(title) {
+    return title
+        .replace(/^#+\s*/, '')
+        .replace(/:$/, '')
+        .trim();
+}
+
+
+function sectionType(title) {
+    const normalized =
+        normalizeSectionTitle(title)
+            .toLowerCase();
+
+    if (
+        normalized.includes('vision')
+    ) {
+        return 'vision';
+    }
+
+    if (
+        normalized.includes('protocol') ||
+        normalized.includes('rule')
+    ) {
+        return 'protocols';
+    }
+
+    if (
+        normalized === 'goal' ||
+        normalized === 'goals'
+    ) {
+        return 'goals';
+    }
+
+    if (
+        normalized.includes('architecture')
+    ) {
+        return 'architecture';
+    }
+
+    if (
+        normalized.includes('phase')
+    ) {
+        return 'phases';
+    }
+
+    return 'document';
+}
+
+
+function parseTopLevelSections(content) {
+    const lines =
+        content
+            .replace(/\r\n/g, '\n')
+            .split('\n');
+
+    const sections = [];
+
+    let current = null;
+
+    const flush = () => {
+        if (!current) {
+            return;
+        }
+
+        sections.push(current);
+        current = null;
+    };
+
+    for (const line of lines) {
+        const heading =
+            line.match(/^#{1,3}\s+(.+)$/);
+
+        if (heading) {
+            flush();
+
+            current = {
+                title:
+                    normalizeSectionTitle(
+                        heading[1]
+                    ),
+                lines: [],
+            };
+
+            continue;
+        }
+
+        if (current) {
+            current.lines.push(line);
+        }
+    }
+
+    flush();
+
+    return sections;
+}
+
+
+function nonEmptyLines(lines) {
+    return lines
+        .map(cleanDocumentLine)
+        .filter(Boolean);
+}
+
+
+function parseDescription(lines) {
+    return nonEmptyLines(lines)
+        .filter(line =>
+            !/^[-*]\s+/.test(line)
+        )
+        .filter(line =>
+            !/^#{1,6}\s+/.test(line)
+        )
+        .join(' ');
+}
+
+
+function parseNamedItems(lines) {
+    const items = [];
+
+    let current = null;
+
+    const flush = () => {
+        if (!current) {
+            return;
+        }
+
+        items.push({
+            title: current.title,
+            body: current.body
+                .join(' ')
+                .trim(),
+        });
+
+        current = null;
+    };
+
+    for (const rawLine of lines) {
+        const line =
+            cleanDocumentLine(rawLine);
+
+        if (!line) {
+            continue;
+        }
+
+        const heading =
+            line.match(/^#{2,6}\s+(.+)$/);
+
+        const boldBullet =
+            line.match(
+                /^[-*]\s+\*\*(.+?)\*\*:?\s*$/
+            );
+
+        const namedBullet =
+            line.match(
+                /^[-*]\s+(.+?):\s*$/
+            );
+
+        if (heading) {
+            flush();
+
+            current = {
+                title:
+                    heading[1].trim(),
+                body: [],
+            };
+
+            continue;
+        }
+
+        if (boldBullet) {
+            flush();
+
+            current = {
+                title:
+                    boldBullet[1].trim(),
+                body: [],
+            };
+
+            continue;
+        }
+
+        if (namedBullet) {
+            flush();
+
+            current = {
+                title:
+                    namedBullet[1].trim(),
+                body: [],
+            };
+
+            continue;
+        }
+
+        if (current) {
+            current.body.push(
+                line.replace(
+                    /^[-*]\s+/,
+                    ''
+                )
+            );
+        }
+    }
+
+    flush();
+
+    return items;
+}
+
+
+function parseGoals(lines) {
+    const goals = [];
+
+    let current = null;
+
+    const flush = () => {
+        if (!current) {
+            return;
+        }
+
+        goals.push(current);
+        current = null;
+    };
+
+    for (const rawLine of lines) {
+        const line =
+            cleanDocumentLine(rawLine);
+
+        if (!line) {
+            continue;
+        }
+
+        const heading =
+            line.match(
+                /^#{2,6}\s+(.+)$/
+            );
+
+        if (heading) {
+            flush();
+
+            current = {
+                id: slugify(
+                    heading[1]
+                ),
+                title:
+                    heading[1].trim(),
+                status: 'Planned',
+                phases: [],
+            };
+
+            continue;
+        }
+
+        if (!current) {
+            continue;
+        }
+
+        const status =
+            line.match(
+                /^(?:[-*]\s*)?Status:\s*(.+)$/i
+            );
+
+        if (status) {
+            current.status =
+                status[1].trim();
+
+            continue;
+        }
+
+        const phase =
+            line.match(
+                /^(?:[-*]\s*)?Phase\s+\d+\s*[:.)-]?\s*(.+)$/i
+            );
+
+        if (phase) {
+            current.phases.push(
+                phase[1].trim()
+            );
+        }
+    }
+
+    flush();
+
+    return goals;
+}
+
+
+function parseDevelopmentPhases(lines) {
+    const phases = [];
+
+    let current = null;
+
+    const flush = () => {
+        if (!current) {
+            return;
+        }
+
+        phases.push(current);
+        current = null;
+    };
+
+    for (const rawLine of lines) {
+        const line =
+            cleanDocumentLine(rawLine);
+
+        if (!line) {
+            continue;
+        }
+
+        const heading =
+            line.match(
+                /^(?:#{2,6}\s+)?(Phase\s+\d+\s*[—:-].+)$/i
+            );
+
+        if (heading) {
+            flush();
+
+            current = {
+                title:
+                    heading[1].trim(),
+                status: 'Planned',
+                body: '',
+            };
+
+            continue;
+        }
+
+        if (!current) {
+            continue;
+        }
+
+        const status =
+            line.match(
+                /^(?:[-*]\s*)?Status:\s*(.+)$/i
+            );
+
+        if (status) {
+            current.status =
+                status[1].trim();
+
+            continue;
+        }
+
+        current.body +=
+            (current.body ? ' ' : '') +
+            line.replace(
+                /^[-*]\s+/,
+                ''
+            );
+    }
+
+    flush();
+
+    return phases;
+}
+
+
+function parseContinuitySections(content) {
+    const parsed =
+        parseTopLevelSections(content);
+
+    const sections = [];
+
+    for (const parsedSection of parsed) {
+        const type =
+            sectionType(
+                parsedSection.title
+            );
+
+        if (type === 'vision') {
+            sections.push({
+                id: 'vision',
+                title:
+                    parsedSection.title,
+                description:
+                    parseDescription(
+                        parsedSection.lines
+                    ),
+                content:
+                    nonEmptyLines(
+                        parsedSection.lines
+                    ).filter(
+                        line =>
+                            !/^[-*]\s+/.test(
+                                line
+                            )
+                    ),
+            });
+
+            continue;
+        }
+
+        if (type === 'protocols') {
+            sections.push({
+                id: 'protocols',
+                title:
+                    parsedSection.title,
+                items:
+                    parseNamedItems(
+                        parsedSection.lines
+                    ),
+            });
+
+            continue;
+        }
+
+        if (type === 'goals') {
+            sections.push({
+                id: 'goals',
+                title:
+                    parsedSection.title,
+                goals:
+                    parseGoals(
+                        parsedSection.lines
+                    ),
+            });
+
+            continue;
+        }
+
+        if (type === 'architecture') {
+            sections.push({
+                id: 'architecture',
+                title:
+                    parsedSection.title,
+                items:
+                    parseNamedItems(
+                        parsedSection.lines
+                    ),
+            });
+
+            continue;
+        }
+
+        if (type === 'phases') {
+            sections.push({
+                id: 'phases',
+                title:
+                    parsedSection.title,
+                phases:
+                    parseDevelopmentPhases(
+                        parsedSection.lines
+                    ),
+            });
+
+            continue;
+        }
+
+        /*
+         * Preserve unknown sections instead of discarding
+         * information from the authoritative document.
+         */
+        const content =
+            nonEmptyLines(
+                parsedSection.lines
+            );
+
+        if (content.length) {
+            sections.push({
+                id:
+                    `document-${sections.length}`,
+                title:
+                    parsedSection.title,
+                content,
+            });
+        }
+    }
+
+    return sections;
+}
+
+
+const CONTINUITY_SECTIONS = [];
+;
+
+
+function Section({
+    section,
+    open,
+    onToggle,
+    activeGoal,
+    onGoalSelect,
+    openGoalPhases,
+    onGoalPhaseToggle,
+    getPhaseState,
+    onPhaseStateChange
+}) {
+    return (
+        <section className="continuity-section">
+            <button
+                type="button"
+                className="continuity-section-header"
+                onClick={onToggle}
+                aria-expanded={open}
+            >
+                <span className="continuity-section-title">
+                    {section.title}
+                </span>
+
+                <span className="continuity-section-toggle">
+                    {open ? '−' : '+'}
+                </span>
+            </button>
+
+            {open && (
+                <div className="continuity-section-body indefinite-list">
+
+                    {section.description && (
+                        <p className="continuity-description">
+                            {section.description}
+                        </p>
+                    )}
+
+                    {section.content?.map(item => (
+                        <div
+                            className="continuity-detail"
+                            key={item}
+                        >
+                            {item}
+                        </div>
+                    ))}
+
+                    {section.items?.map(item => (
+                        <article
+                            className="continuity-item"
+                            key={item.title}
+                        >
+                            <strong>{item.title}</strong>
+                            <p>{item.body}</p>
+                        </article>
+                    ))}
+
+                    {section.goals?.map(goal => {
+                        const selected =
+                            activeGoal === goal.id;
+
+                        const phasesOpen =
+                            openGoalPhases.has(goal.id);
+
+                        const allPhasesComplete =
+                            goal.phases.length > 0 &&
+                            goal.phases.every(
+                                (_, index) =>
+                                    getPhaseState(
+                                        goal.id,
+                                        index
+                                    ).complete
+                            );
+
+                        const goalStatus =
+                            allPhasesComplete
+                                ? 'Complete'
+                                : goal.status;
+
+                        return (
+                            <article
+                                className={
+                                    'continuity-goal' +
+                                    (selected
+                                        ? ' active'
+                                        : '') +
+                                    (allPhasesComplete
+                                        ? ' complete'
+                                        : '')
+                                }
+                                key={goal.id}
+                            >
+                                <div className="continuity-goal-header">
+                                    <div>
+                                        <strong>{goal.title}</strong>
+
+                                        <span className="continuity-status">
+                                            {goalStatus}
+                                        </span>
+                                    </div>
+
+                                    <div className="continuity-goal-actions">
+                                        <button
+                                            type="button"
+                                            className="secondary"
+                                            onClick={() =>
+                                                onGoalPhaseToggle(
+                                                    goal.id
+                                                )
+                                            }
+                                            aria-expanded={phasesOpen}
+                                        >
+                                            {phasesOpen
+                                                ? 'Hide Phases'
+                                                : 'Show Phases'}
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            className={
+                                                selected
+                                                    ? 'secondary'
+                                                    : 'primary'
+                                            }
+                                            onClick={() =>
+                                                onGoalSelect(
+                                                    selected
+                                                        ? null
+                                                        : goal.id
+                                                )
+                                            }
+                                        >
+                                            {selected
+                                                ? 'Active Goal'
+                                                : 'Set Active'}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {phasesOpen && (
+                                    <div className="continuity-phase-list indefinite-list">
+                                        {goal.phases.map(
+                                            (phase, index) => {
+                                                const state =
+                                                    getPhaseState(
+                                                        goal.id,
+                                                        index
+                                                    );
+
+                                                const neither =
+                                                    !state.active &&
+                                                    !state.complete;
+
+                                                return (
+                                                    <div
+                                                        className={
+                                                            'continuity-phase' +
+                                                            (state.active
+                                                                ? ' active'
+                                                                : '') +
+                                                            (state.complete
+                                                                ? ' complete'
+                                                                : '')
+                                                        }
+                                                        key={`${goal.id}-${index}`}
+                                                    >
+                                                        
+
+                                                        <span
+                                                            className={
+                                                                'continuity-phase-status-indicator' +
+                                                                (state.active
+                                                                    ? ' active'
+                                                                    : state.complete
+                                                                        ? ' complete'
+                                                                        : '')
+                                                            }
+                                                        >
+                                                            {state.active
+                                                                ? 'Active'
+                                                                : state.complete
+                                                                    ? 'Complete'
+                                                                    : 'Pending'}
+                                                        </span>
+
+                                                        <div className="continuity-phase-main">
+                                                            <div className="continuity-phase-title">
+                                                                <span>
+                                                                    Phase {index + 1}
+                                                                </span>
+                                                                <strong>
+                                                                    {phase}
+                                                                </strong>
+                                                            </div>
+
+
+                                                             <div className="continuity-phase-status-controls">
+                                                                 <label className="continuity-phase-status-option">
+                                                                     <input
+                                                                         type="checkbox"
+                                                                         checked={state.active}
+                                                                         onChange={() =>
+                                                                             onPhaseStateChange(
+                                                                                 goal.id,
+                                                                                 index,
+                                                                                 'active'
+                                                                             )
+                                                                         }
+                                                                     />
+                                                                     <span>Active</span>
+                                                                 </label>
+
+                                                                 <label className="continuity-phase-status-option">
+                                                                     <input
+                                                                         type="checkbox"
+                                                                         checked={state.complete}
+                                                                         onChange={() =>
+                                                                             onPhaseStateChange(
+                                                                                 goal.id,
+                                                                                 index,
+                                                                                 'complete'
+                                                                             )
+                                                                         }
+                                                                     />
+                                                                     <span>Complete</span>
+                                                                 </label>
+                                                             </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+                                        )}
+                                    </div>
+                                )}
+                            </article>
+                        );
+                    })}
+
+                    {section.phases?.map(phase => (
+                        <article
+                            className="continuity-phase-card"
+                            key={phase.title}
+                        >
+                            <div className="continuity-phase-card-head">
+                                <strong>{phase.title}</strong>
+
+                                <span className="continuity-status">
+                                    {phase.status}
+                                </span>
+                            </div>
+
+                            <p>{phase.body}</p>
+                        </article>
+                    ))}
+
+                </div>
+            )}
+        </section>
+    );
+}
+
+function ContinuityViewer() {
+    const [documentText, setDocumentText] = useState('');
+    const [loadState, setLoadState] = useState('loading');
+
+    const [openSections, setOpenSections] = useState(
+        () => new Set(['goals'])
+    );
+
+    const [activeGoal, setActiveGoal] = useState(
+        () =>
+            localStorage.getItem(
+                'webapp2-continuity-active-goal'
+            ) || null
+    );
+
+    const [openGoalPhases, setOpenGoalPhases] = useState(
+        () => {
+            try {
+                const stored = localStorage.getItem(
+                    'webapp2-continuity-open-goal-phases'
+                );
+
+                if (stored) {
+                    return new Set(JSON.parse(stored));
+                }
+            } catch {
+                // Use defaults if persisted state is invalid.
+            }
+
+            return new Set(
+                CONTINUITY_SECTIONS
+                    .find(section => section.id === 'goals')
+                    ?.goals
+                    ?.map(goal => goal.id) || []
+            );
+        }
+    );
+
+    const [phaseStatuses, setPhaseStatuses] = useState(
+        () => {
+            try {
+                const stored = localStorage.getItem(
+                    'webapp2-continuity-phase-statuses'
+                );
+
+                return stored
+                    ? JSON.parse(stored)
+                    : {};
+            } catch {
+                return {};
+            }
+        }
+    );
+
+
+    useEffect(() => {
+        let cancelled = false;
+
+        fetch(
+            `${CONTINUITY_DOCUMENT_URL}?v=${Date.now()}`,
+            {
+                cache: 'no-store'
+            }
+        )
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(
+                        `Continuity document request failed: ${response.status}`
+                    );
+                }
+
+                return response.text();
+            })
+            .then(text => {
+                if (cancelled) {
+                    return;
+                }
+
+                if (!text.trim()) {
+                    throw new Error(
+                        'The runtime continuity document returned no content.'
+                    );
+                }
+
+                setDocumentText(text);
+                setLoadState('ready');
+            })
+            .catch(error => {
+                if (!cancelled) {
+                    setLoadState('error');
+                    setDocumentText(
+                        `Unable to load the authoritative continuity document.\n\n${error.message}`
+                    );
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+
+    const parsedSections = useMemo(
+        () =>
+            loadState === 'ready'
+                ? parseContinuitySections(
+                    documentText
+                )
+                : [],
+        [documentText, loadState]
+    );
+
+
+    /*
+     * Keep the existing UI architecture but supply it with
+     * the authoritative document's current contents.
+     */
+    const continuitySections =
+        parsedSections.length
+            ? parsedSections
+            : CONTINUITY_SECTIONS;
+
+
+    const continuityRevision =
+        getContinuityRevision(
+            documentText
+        );
+
+
+    const visibleCount = useMemo(
+        () => openSections.size,
+        [openSections]
+    );
+
+    const toggleSection = id => {
+        setOpenSections(current => {
+            const next = new Set(current);
+
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+
+            return next;
+        });
+    };
+
+    const selectGoal = id => {
+        setActiveGoal(id);
+
+        if (id) {
+            localStorage.setItem(
+                'webapp2-continuity-active-goal',
+                id
+            );
+        } else {
+            localStorage.removeItem(
+                'webapp2-continuity-active-goal'
+            );
+        }
+    };
+
+    const toggleGoalPhases = goalId => {
+        setOpenGoalPhases(current => {
+            const next = new Set(current);
+
+            if (next.has(goalId)) {
+                next.delete(goalId);
+            } else {
+                next.add(goalId);
+            }
+
+            localStorage.setItem(
+                'webapp2-continuity-open-goal-phases',
+                JSON.stringify([...next])
+            );
+
+            return next;
+        });
+    };
+
+    const getPhaseState = (goalId, phaseIndex) => {
+        const stored =
+            phaseStatuses?.[goalId]?.[phaseIndex];
+
+        return {
+            active: stored?.active === true,
+            complete: stored?.complete === true
+        };
+    };
+
+    const setPhaseState = (
+        goalId,
+        phaseIndex,
+        requestedState
+    ) => {
+        setPhaseStatuses(current => {
+            const currentGoal =
+                current?.[goalId] || {};
+
+            const currentPhase =
+                currentGoal?.[phaseIndex] || {
+                    active: false,
+                    complete: false
+                };
+
+            let nextPhase;
+
+            if (requestedState === 'active') {
+                nextPhase = {
+                    active: !currentPhase.active,
+                    complete: false
+                };
+            } else {
+                nextPhase = {
+                    active: false,
+                    complete: !currentPhase.complete
+                };
+            }
+
+            const next = {
+                ...current,
+                [goalId]: {
+                    ...currentGoal,
+                    [phaseIndex]: nextPhase
+                }
+            };
+
+            localStorage.setItem(
+                'webapp2-continuity-phase-statuses',
+                JSON.stringify(next)
+            );
+
+            return next;
+        });
+    };
+
+    const openAll = () => {
+        setOpenSections(
+            new Set(
+                continuitySections.map(
+                    section => section.id
+                )
+            )
+        );
+    };
+
+    const closeAll = () => {
+        setOpenSections(new Set());
+    };
+
+    return (
+        <div className="continuity-viewer">
+            <div className="continuity-toolbar">
+                <div>
+                    <div className="eyebrow">
+                        INSTANCE MODULE
+                    </div>
+
+                    <h2>
+                        Continuity
+                        {continuityRevision && (
+                            <span className="continuity-revision">
+                                {' · Rev '}
+                                {continuityRevision}
+                            </span>
+                        )}
+                    </h2>
+
+                    <p>
+                        Navigate the active WebApp-2 project
+                        state without reading the raw document.
+                    </p>
+                </div>
+
+                <div className="continuity-toolbar-actions">
+                    <button
+                        type="button"
+                        className="secondary"
+                        onClick={openAll}
+                    >
+                        Open All
+                    </button>
+
+                    <button
+                        type="button"
+                        className="secondary"
+                        onClick={closeAll}
+                    >
+                        Close All
+                    </button>
+                </div>
+            </div>
+
+            <div className="continuity-summary">
+                <div>
+                    <span>OPEN SECTIONS</span>
+                    <strong>{visibleCount}</strong>
+                </div>
+
+                <div>
+                    <span>ACTIVE GOAL</span>
+                    <strong>
+                        {activeGoal
+                            ? 'Selected'
+                            : 'None'}
+                    </strong>
+                </div>
+
+                <div>
+                    <span>MODULE TYPE</span>
+                    <strong>INSTANCE</strong>
+                </div>
+            </div>
+
+            {loadState === 'loading' ? (
+                <div className="continuity-sections">
+                    <section className="continuity-section">
+                        <div className="continuity-section-body">
+                            Loading authoritative continuity document…
+                        </div>
+                    </section>
+                </div>
+            ) : loadState === 'error' ? (
+                <div className="continuity-sections">
+                    <section className="continuity-section">
+                        <div className="continuity-section-body">
+                            <pre className="continuity-document-content">
+                                {documentText}
+                            </pre>
+                        </div>
+                    </section>
+                </div>
+            ) : (
+                <div className="continuity-sections">
+                    {continuitySections.map(section => (
+                    <Section
+                        key={section.id}
+                        section={section}
+                        open={openSections.has(section.id)}
+                        onToggle={() =>
+                            toggleSection(section.id)
+                        }
+                        activeGoal={activeGoal}
+                        onGoalSelect={selectGoal}
+                        openGoalPhases={openGoalPhases}
+                        onGoalPhaseToggle={
+                            toggleGoalPhases
+                        }
+                        getPhaseState={getPhaseState}
+                        onPhaseStateChange={
+                            setPhaseState
+                        }
+                    />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+export default ContinuityViewer;

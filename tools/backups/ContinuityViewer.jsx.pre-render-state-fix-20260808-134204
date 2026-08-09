@@ -1,0 +1,175 @@
+import { useEffect, useState } from 'react';
+
+/*
+ * WEBAPP2_CONTINUITY_RUNTIME_DOCUMENT
+ *
+ * The Continuity module reads the exact document synchronized by
+ * webapp2_update.py:
+ *
+ *   /continuity/webapp2_continuity.txt
+ */
+const CONTINUITY_DOCUMENT_URL = '/continuity/webapp2_continuity.txt';
+
+/*
+ * WEBAPP2_CONTINUITY_EMPTY_DOCUMENT_DIAGNOSTIC
+ *
+ * An empty runtime document is treated as an error rather than
+ * silently rendering a blank Continuity page.
+ */
+
+
+
+/*
+ * WEBAPP2_CONTINUITY_REVISION_DISPLAY
+ *
+ * The revision number is derived exclusively from the currently
+ * loaded runtime continuity document.
+ *
+ * No revision number is stored in the frontend source.
+ */
+function getContinuityRevision(content) {
+    const match = content.match(
+        /Current Revision:\s*\n\s*(\d+)(?:_[^\s]+)?/
+    );
+
+    return match ? match[1] : null;
+}
+
+function ContinuityDocument({ content }) {
+    return (
+        <section className="continuity-section continuity-document-section">
+            <div className="continuity-section-body">
+                <pre className="continuity-document-content">
+                    {content}
+                </pre>
+            </div>
+        </section>
+    );
+}
+
+function ContinuityViewer() {
+    const [documentText, setDocumentText] = useState('');
+    const [loadState, setLoadState] = useState('loading');
+    const [continuityRevision, setContinuityRevision] = useState(null);
+    const [open, setOpen] = useState(true);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        fetch(`${CONTINUITY_DOCUMENT_URL}?v=${Date.now()}`, {
+            cache: 'no-store'
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(
+                        `Continuity document request failed: ${response.status}`
+                    );
+                }
+
+                return response.text();
+            })
+            .then(text => {
+                if (!cancelled) {
+                    const normalizedText = text.trim();
+
+                    if (!normalizedText) {
+                        setDocumentText(
+                            'The runtime continuity document is empty.\\n\\n' +
+                            'Expected source: /continuity/webapp2_continuity.txt\\n\\n' +
+                            'The Continuity Viewer is connected to the runtime ' +
+                            'document, but that document currently contains no ' +
+                            'continuity content.\\n\\n' +
+                            'The authoritative continuity document has not been ' +
+                            'modified by the frontend.'
+                        );
+                        setContinuityRevision(null);
+                        setLoadState('error');
+                        return;
+                    }
+
+                    setDocumentText(text);
+                    setContinuityRevision(
+                        getContinuityRevision(text)
+                    );
+                    setLoadState('ready');
+                }
+            })
+            .catch(error => {
+                if (!cancelled) {
+                    setDocumentText(
+                        `Unable to load the authoritative continuity document.\n\n${error.message}`
+                    );
+                    setLoadState('error');
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    return (
+        <div className="continuity-viewer">
+            <div className="continuity-toolbar">
+                <div>
+                    <div className="eyebrow">INSTANCE MODULE</div>
+                    <h2>
+                        Continuity
+                        {continuityRevision && (
+                            <span className="continuity-revision">
+                                {" · Rev "}{continuityRevision}
+                            </span>
+                        )}
+                    </h2>
+                    <p>
+                        Authoritative WebApp-2 project state, protocols,
+                        progress, and agent-continuation information.
+                    </p>
+                </div>
+
+                <div className="continuity-toolbar-actions">
+                    <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => setOpen(current => !current)}
+                    >
+                        {open ? 'Collapse' : 'Expand'}
+                    </button>
+                </div>
+            </div>
+
+            <div className="continuity-summary">
+                <div>
+                    <span>DOCUMENT</span>
+                    <strong>
+                        {loadState === 'ready'
+                            ? 'CURRENT'
+                            : loadState === 'loading'
+                                ? 'LOADING'
+                                : 'ERROR'}
+                    </strong>
+                </div>
+
+                <div>
+                    <span>SOURCE</span>
+                    <strong>WEBAPP2 UPDATE</strong>
+                </div>
+
+                <div>
+                    <span>MODULE TYPE</span>
+                    <strong>INSTANCE</strong>
+                </div>
+            </div>
+
+            {open && (
+                <div className="continuity-sections">
+                    <ContinuityDocument content={documentText} />
+                </div>
+            )}
+        </div>
+    );
+}
+
+export default ContinuityViewer;
+
+

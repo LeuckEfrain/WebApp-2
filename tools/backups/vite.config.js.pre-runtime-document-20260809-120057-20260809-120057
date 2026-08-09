@@ -1,0 +1,52 @@
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import fs from 'node:fs';
+
+const CONTINUITY_FILE =
+    'D:/Projects/WebApps/continuity/webapp_2/webapp2_continuity.txt';
+
+export default defineConfig({
+    plugins: [
+        react(),
+        {
+            name: 'webapp2-external-continuity',
+            configureServer(server) {
+                server.middlewares.use(
+                    '/continuity/webapp2_continuity.txt',
+                    (req, res, next) => {
+                        if (!fs.existsSync(CONTINUITY_FILE)) {
+                            res.statusCode = 404;
+                            res.end(
+                                'Authoritative continuity document not found.'
+                            );
+                            return;
+                        }
+
+                        try {
+                            const content = fs.readFileSync(
+                                CONTINUITY_FILE,
+                                'utf-8'
+                            );
+
+                            res.statusCode = 200;
+                            res.setHeader(
+                                'Content-Type',
+                                'text/plain; charset=utf-8'
+                            );
+                            res.setHeader(
+                                'Cache-Control',
+                                'no-store'
+                            );
+                            res.end(content);
+                        } catch (error) {
+                            res.statusCode = 500;
+                            res.end(
+                                `Unable to read continuity document.\n\n${error.message}`
+                            );
+                        }
+                    }
+                );
+            }
+        }
+    ]
+});

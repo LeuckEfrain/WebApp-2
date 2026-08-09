@@ -1,0 +1,177 @@
+import continuityText from '../../../../../continuity/webapp_2/webapp2_continuity.txt?raw';
+
+const normalizeTitle = value =>
+    value
+        .trim()
+        .replace(/^#+\s*/, '')
+        .replace(/\s+/g, ' ')
+        .toLowerCase();
+
+const displayTitle = value =>
+    value
+        .trim()
+        .replace(/^#+\s*/, '')
+        .replace(/\s+/g, ' ');
+
+const slugify = value =>
+    displayTitle(value)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+
+const IGNORED_HEADINGS = new Set([
+    'WEBAPP-2 PROJECT STATE / CONTINUATION DOCUMENT',
+    'END OF GOAL LIFECYCLE AND COMPLETION PROTOCOL',
+    'END OF INSTANCE-LOCAL MODULE ARCHITECTURE',
+    'END OF AUTOMATED CONTINUITY-UPDATE PROTOCOL',
+    'END OF MODIFY_FRONTEND.PY PROTOCOL',
+    'END OF PER-CHANGE REVISION RECORD PROTOCOL',
+    'END OF DEDICATED BACKUP DIRECTORY',
+    'END OF CONTINUITY VERSION'
+]);
+
+function parseDocument(text) {
+    const lines = text
+        .replace(/\r\n/g, '\n')
+        .split('\n');
+
+    const sections = [];
+    let current = null;
+
+    for (const rawLine of lines) {
+        const line = rawLine.trim();
+
+        if (!line) {
+            continue;
+        }
+
+        const headingMatch = line.match(
+            /^#{0,6}\s*([A-Z][A-Z0-9 /_.&'()\-—]+)\s*$/
+        );
+
+        if (headingMatch) {
+            const title = displayTitle(headingMatch[1]);
+
+            if (IGNORED_HEADINGS.has(title)) {
+                current = null;
+                continue;
+            }
+
+            current = {
+                id: slugify(title),
+                title,
+                lines: []
+            };
+
+            sections.push(current);
+            continue;
+        }
+
+        if (current) {
+            current.lines.push(line);
+        }
+    }
+
+    return sections;
+}
+
+function findSection(sections, aliases) {
+    return sections.find(section => {
+        const normalized = normalizeTitle(section.title);
+
+        return aliases.some(
+            alias =>
+                normalized === normalizeTitle(alias)
+        );
+    });
+}
+
+function convertSection(
+    sections,
+    id,
+    title,
+    aliases
+) {
+    const section = findSection(
+        sections,
+        aliases
+    );
+
+    if (!section) {
+        return {
+            id,
+            title,
+            description:
+                'This section is not currently present in the continuity document.',
+            content: []
+        };
+    }
+
+    return {
+        id,
+        title,
+        description:
+            'Loaded dynamically from webapp2_continuity.txt.',
+        content: section.lines
+    };
+}
+
+function buildViewerSections(sections) {
+    return [
+        convertSection(
+            sections,
+            'vision',
+            'Project Vision',
+            [
+                'PROJECT VISION'
+            ]
+        ),
+
+        convertSection(
+            sections,
+            'protocols',
+            'Protocols',
+            [
+                'PROTOCOLS'
+            ]
+        ),
+
+        convertSection(
+            sections,
+            'goals',
+            'Goals',
+            [
+                'GOALS',
+                'ACTIVE / INCOMPLETE GOALS'
+            ]
+        ),
+
+        convertSection(
+            sections,
+            'architecture',
+            'Architecture',
+            [
+                'ARCHITECTURE',
+                'INSTANCE-LOCAL MODULE ARCHITECTURE'
+            ]
+        ),
+
+        convertSection(
+            sections,
+            'phases',
+            'Development Phases',
+            [
+                'DEVELOPMENT PHASES',
+                'PHASE ROADMAP'
+            ]
+        )
+    ];
+}
+
+export const CONTINUITY_DOCUMENT_TEXT =
+    continuityText;
+
+export const CONTINUITY_SECTIONS =
+    buildViewerSections(
+        parseDocument(continuityText)
+    );

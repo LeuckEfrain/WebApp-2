@@ -1,0 +1,605 @@
+import { useEffect, useState } from 'react';
+
+/*
+ * WEBAPP2_CONTINUITY_RUNTIME_DOCUMENT
+ *
+ * The Continuity module reads the exact document synchronized by
+ * webapp2_update.py:
+ *
+ *   /continuity/webapp2_continuity.txt
+ */
+/*
+ * WEBAPP2 CONTINUITY DOCUMENT PARSERS
+ *
+ * The external continuity document is authoritative.
+ * These parsers convert the document text into structured data
+ * consumed by the existing Continuity Viewer UI.
+ *
+ * No project-state content is stored here.
+ */
+
+const CONTINUITY_DOCUMENT_URL =
+    '/continuity/webapp2_continuity.txt';
+
+
+/* ============================================================
+ * Generic helpers
+ * ============================================================ */
+
+function normalizeLine(line) {
+    return line
+        .replace(/\r/g, '')
+        .replace(/\t/g, '    ')
+        .trim();
+}
+
+function isBlank(line) {
+    return normalizeLine(line) === '';
+}
+
+function stripDecorativePrefix(line) {
+    return normalizeLine(line)
+        .replace(/^[-*+]\s+/, '')
+        .replace(/^\d+[.)]\s+/, '')
+        .trim();
+}
+
+function cleanHeading(line) {
+    return normalizeLine(line)
+        .replace(/^#{1,6}\s+/, '')
+        .replace(/^={2,}\s*$/, '')
+        .replace(/^-{2,}\s*$/, '')
+        .trim();
+}
+
+function sectionKey(title) {
+    return cleanHeading(title)
+        .toLowerCase()
+        .replace(/&/g, 'and')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+}
+
+
+/* ============================================================
+ * Revision parser
+ * ============================================================ */
+
+function getContinuityRevision(content) {
+    const match = content.match(
+        /Current Revision:\s*\n\s*(\S+)/
+    );
+
+    return match ? match[1] : null;
+}
+
+
+/* ============================================================
+ * Continuity version parser
+ * ============================================================ */
+
+function getContinuityVersion(content) {
+    const match = content.match(
+        /Current Continuity Version:\s*\n\s*(\S+)/
+    );
+
+    return match ? match[1] : null;
+}
+
+
+/* ============================================================
+ * Previous revision/version
+ * ============================================================ */
+
+function getPreviousContinuityVersion(content) {
+    const match = content.match(
+        /Previous Continuity Version:\s*\n\s*(\S+)/
+    );
+
+    return match ? match[1] : null;
+}
+
+
+/* ============================================================
+ * Revision metadata
+ * ============================================================ */
+
+function getRevisionMetadata(content) {
+    return {
+        continuityVersion: getContinuityVersion(content),
+        previousContinuityVersion:
+            getPreviousContinuityVersion(content),
+        revision: getContinuityRevision(content),
+    };
+}
+
+
+/* ============================================================
+ * Major document section parser
+ *
+ * Recognizes headings such as:
+ *
+ * # Project Vision
+ * ## Protocols
+ * ## Goals
+ * ## Architecture
+ * ## Development Phases
+ *
+ * It deliberately does not require a specific heading level.
+ * ============================================================ */
+
+function parseDocumentSections(content) {
+    const lines = content.replace(/\r/g, '').split('\n');
+
+    const sections = [];
+    let current = null;
+
+    function finishCurrent() {
+        if (!current) {
+            return;
+        }
+
+        current.content = current.lines.join('\n').trim();
+
+        delete current.lines;
+
+        sections.push(current);
+        current = null;
+    }
+
+    for (const rawLine of lines) {
+        const line = normalizeLine(rawLine);
+
+        /*
+         * A Markdown-style heading.
+         */
+        const markdownHeading = rawLine.match(
+            /^\s*(#{1,6})\s+(.+?)\s*$/
+        );
+
+        /*
+         * A plain heading commonly used by the continuity
+         * document. We intentionally only recognize known
+         * structural titles here so ordinary prose does not
+         * accidentally become a section.
+         */
+        const plainTitle = cleanHeading(line).toLowerCase();
+
+        const knownSection =
+            plainTitle === 'project vision' ||
+            plainTitle === 'vision' ||
+            plainTitle === 'protocols' ||
+            plainTitle === 'goals' ||
+            plainTitle === 'architecture' ||
+            plainTitle === 'development phases' ||
+            plainTitle === 'development phase' ||
+            plainTitle === 'phases';
+
+        if (markdownHeading || knownSection) {
+            const title = markdownHeading
+                ? cleanHeading(markdownHeading[2])
+                : cleanHeading(line);
+
+            /*
+             * We only treat recognized structural headings as
+             * top-level viewer sections.
+             */
+            if (
+                knownSection ||
+                [
+                    'project vision',
+                    'vision',
+                    'protocols',
+                    'goals',
+                    'architecture',
+                    'development phases',
+                    'development phase',
+                    'phases',
+                ].includes(title.toLowerCase())
+            ) {
+                finishCurrent();
+
+                current = {
+                    id: sectionKey(title),
+                    title,
+                    lines: [],
+                    content: '',
+                };
+
+                continue;
+            }
+        }
+
+        if (current) {
+            current.lines.push(rawLine);
+        }
+    }
+
+    finishCurrent();
+
+    return sections;
+}
+
+
+/* ============================================================
+ * Find one named section
+ * ============================================================ */
+
+function getDocumentSection(content, names) {
+    const wanted = new Set(
+        names.map(name => sectionKey(name))
+    );
+
+    return parseDocumentSections(content).find(section =>
+        wanted.has(section.id)
+    ) || null;
+}
+
+
+/* ============================================================
+ * Generic bullet parser
+ * ============================================================ */
+
+function parseBulletItems(content) {
+    return content
+        .replace(/\r/g, '')
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => /^[-*+]\s+/.test(line))
+        .map(line =>
+            line
+                .replace(/^[-*+]\s+/, '')
+                .trim()
+        );
+}
+
+
+/* ============================================================
+ * Protocol parser
+ *
+ * Protocols are intentionally treated as document data.
+ * Nothing is hard-coded beyond recognizing bullet/list syntax.
+ * ============================================================ */
+
+function parseProtocols(content) {
+    const section = getDocumentSection(
+        content,
+        ['Protocols']
+    );
+
+    if (!section) {
+        return [];
+    }
+
+    return parseBulletItems(section.content);
+}
+
+
+/* ============================================================
+ * Goal heading recognition
+ *
+ * Supports examples such as:
+ *
+ * Goal 1: Build the foundation
+ * Goal 2 - Complete architecture
+ * Goal: Establish project structure
+ *
+ * It also accepts numbered goal headings:
+ *
+ * 1. Build the foundation
+ * 2. Complete architecture
+ * ============================================================ */
+
+function parseGoalHeading(line) {
+    const cleaned = cleanHeading(line);
+
+    let match = cleaned.match(
+        /^Goal\s*(\d+)?\s*[:\-–—]?\s*(.+)$/i
+    );
+
+    if (match) {
+        return {
+            number: match[1] || null,
+            title: match[2].trim(),
+        };
+    }
+
+    match = cleaned.match(
+        /^(\d+)[.)]\s+(.+)$/
+    );
+
+    if (match) {
+        return {
+            number: match[1],
+            title: match[2].trim(),
+        };
+    }
+
+    return null;
+}
+
+
+/* ============================================================
+ * Phase heading recognition
+ *
+ * Supports:
+ *
+ * Phase 1: Foundation
+ * Phase 2 - Architecture
+ * Phase: UI
+ * 1. Foundation
+ *
+ * Only lines explicitly containing "Phase" are considered
+ * phases unless the goal parser has established a phase list.
+ * ============================================================ */
+
+function parsePhaseHeading(line) {
+    const cleaned = cleanHeading(line);
+
+    const match = cleaned.match(
+        /^Phase\s*(\d+)?\s*[:\-–—]?\s*(.+)$/i
+    );
+
+    if (!match) {
+        return null;
+    }
+
+    return {
+        number: match[1] || null,
+        title: match[2].trim(),
+    };
+}
+
+
+/* ============================================================
+ * Goal/phase state parser
+ *
+ * Reads explicit state markers if they exist in the document:
+ *
+ * Active
+ * Complete
+ * Completed
+ * Pending
+ *
+ * State is not invented if the document does not specify one.
+ * ============================================================ */
+
+function parseState(text) {
+    const normalized = text.toLowerCase();
+
+    if (
+        /\bcompleted\b/.test(normalized) ||
+        /\bcomplete\b/.test(normalized)
+    ) {
+        return 'complete';
+    }
+
+    if (/\bactive\b/.test(normalized)) {
+        return 'active';
+    }
+
+    if (/\bpending\b/.test(normalized)) {
+        return 'pending';
+    }
+
+    return 'pending';
+}
+
+
+/* ============================================================
+ * Goal parser
+ * ============================================================ */
+
+function parseGoals(content) {
+    const section = getDocumentSection(
+        content,
+        ['Goals']
+    );
+
+    if (!section) {
+        return [];
+    }
+
+    const lines = section.content.replace(/\r/g, '').split('\n');
+
+    const goals = [];
+    let currentGoal = null;
+    let currentPhase = null;
+
+    function finishPhase() {
+        if (!currentGoal || !currentPhase) {
+            return;
+        }
+
+        currentGoal.phases.push(currentPhase);
+        currentPhase = null;
+    }
+
+    function finishGoal() {
+        if (!currentGoal) {
+            return;
+        }
+
+        finishPhase();
+
+        currentGoal.state =
+            currentGoal.phases.length > 0 &&
+            currentGoal.phases.every(
+                phase => phase.state === 'complete'
+            )
+                ? 'complete'
+                : currentGoal.state;
+
+        goals.push(currentGoal);
+        currentGoal = null;
+    }
+
+    for (const rawLine of lines) {
+        const line = normalizeLine(rawLine);
+
+        if (isBlank(line)) {
+            continue;
+        }
+
+        const goalHeading = parseGoalHeading(line);
+
+        if (goalHeading) {
+            finishGoal();
+
+            currentGoal = {
+                id: `goal-${goals.length + 1}`,
+                number: goalHeading.number,
+                title: goalHeading.title,
+                state: parseState(line),
+                phases: [],
+                description: '',
+            };
+
+            continue;
+        }
+
+        const phaseHeading = parsePhaseHeading(line);
+
+        if (phaseHeading && currentGoal) {
+            finishPhase();
+
+            currentPhase = {
+                id:
+                    `${currentGoal.id}-phase-${currentGoal.phases.length + 1}`,
+                number: phaseHeading.number,
+                title: phaseHeading.title,
+                state: parseState(line),
+                content: '',
+            };
+
+            continue;
+        }
+
+        /*
+         * Everything else belongs to the current phase if one
+         * exists, otherwise to the current goal.
+         */
+        if (currentPhase) {
+            currentPhase.content +=
+                `${currentPhase.content ? '\n' : ''}${rawLine}`;
+        } else if (currentGoal) {
+            currentGoal.description +=
+                `${currentGoal.description ? '\n' : ''}${rawLine}`;
+        }
+    }
+
+    finishGoal();
+
+    return goals;
+}
+
+
+/* ============================================================
+ * Development phase parser
+ *
+ * This handles a dedicated "Development Phases" section
+ * independently from phases nested under Goals.
+ * ============================================================ */
+
+function parseDevelopmentPhases(content) {
+    const section = getDocumentSection(
+        content,
+        [
+            'Development Phases',
+            'Development Phase',
+            'Phases',
+        ]
+    );
+
+    if (!section) {
+        return [];
+    }
+
+    const lines = section.content.replace(/\r/g, '').split('\n');
+
+    const phases = [];
+    let current = null;
+
+    function finish() {
+        if (!current) {
+            return;
+        }
+
+        current.content = current.lines.join('\n').trim();
+        delete current.lines;
+
+        phases.push(current);
+        current = null;
+    }
+
+    for (const rawLine of lines) {
+        const line = normalizeLine(rawLine);
+
+        if (isBlank(line)) {
+            continue;
+        }
+
+        const phase = parsePhaseHeading(line);
+
+        if (phase) {
+            finish();
+
+            current = {
+                id: `development-phase-${phases.length + 1}`,
+                number: phase.number,
+                title: phase.title,
+                state: parseState(line),
+                lines: [],
+                content: '',
+            };
+
+            continue;
+        }
+
+        if (current) {
+            current.lines.push(rawLine);
+        }
+    }
+
+    finish();
+
+    return phases;
+}
+
+
+/* ============================================================
+ * Structured parser entry point
+ *
+ * The rest of ContinuityViewer should consume this object.
+ * ============================================================ */
+
+function parseContinuityDocument(content) {
+    const sections = parseDocumentSections(content);
+
+    return {
+        raw: content,
+
+        metadata: getRevisionMetadata(content),
+
+        sections,
+
+        vision:
+            getDocumentSection(
+                content,
+                ['Project Vision', 'Vision']
+            ),
+
+        protocols: parseProtocols(content),
+
+        goals: parseGoals(content),
+
+        architecture:
+            getDocumentSection(
+                content,
+                ['Architecture']
+            ),
+
+        developmentPhases:
+            parseDevelopmentPhases(content),
+    };
+}

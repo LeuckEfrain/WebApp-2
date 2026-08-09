@@ -197,16 +197,13 @@ function ContinuityViewer() {
                         result.sections
                     );
 
-                    // WEBAPP2_GOALS_OPEN_AFTER_LOAD
-                    // Open Goals after authoritative continuity data
-                    // has successfully loaded.
                     setOpenSections(
-                        new Set(['goals'])
+                        new Set(
+                            result.sections.map(
+                                section => section.id
+                            )
+                        )
                     );
-
-                    // Do not overwrite the initial open state here.
-                    // Goals is intentionally opened after the authoritative
-                    // continuity data loads.
                 }
             } catch (error) {
                 if (!cancelled) {

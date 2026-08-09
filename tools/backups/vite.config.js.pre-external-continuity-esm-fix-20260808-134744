@@ -1,26 +1,35 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import fs from 'node:fs';
-import path from 'node:path';
-
-const CONTINUITY_FILE = path.resolve(
-    '..',
-    '..',
-    'continuity',
-    'webapp_2',
-    'webapp2_continuity.txt'
-);
-
-function webapp2ContinuityDocument() {
+import { defineConfig } from 'vite'; import react from '@vitejs/plugin-react'; 
+/*
+ * WEBAPP2_EXTERNAL_CONTINUITY_SERVER
+ *
+ * The Continuity module is instance-specific.
+ *
+ * The authoritative continuity document remains outside the
+ * WebApp-2 repository:
+ *
+ * D:\Projects\WebApps\continuity\webapp_2\webapp2_continuity.txt
+ *
+ * This Vite middleware exposes that existing file at:
+ *
+ * /continuity/webapp2_continuity.txt
+ *
+ * No duplicate runtime document is created.
+ */
+function webapp2ExternalContinuityServer() {
     return {
-        name: 'webapp2-continuity-document',
+        name: 'webapp2-external-continuity-server',
 
         configureServer(server) {
             server.middlewares.use(
-                '/__webapp2_continuity__',
+                '/continuity/webapp2_continuity.txt',
                 (req, res) => {
+                    const fs = require('fs');
+
+                    const documentPath =
+                        'D:\\Projects\\WebApps\\continuity\\webapp_2\\webapp2_continuity.txt';
+
                     try {
-                        if (!fs.existsSync(CONTINUITY_FILE)) {
+                        if (!fs.existsSync(documentPath)) {
                             res.statusCode = 404;
                             res.setHeader(
                                 'Content-Type',
@@ -33,8 +42,8 @@ function webapp2ContinuityDocument() {
                         }
 
                         const content = fs.readFileSync(
-                            CONTINUITY_FILE,
-                            'utf8'
+                            documentPath,
+                            'utf-8'
                         );
 
                         res.statusCode = 200;
@@ -46,7 +55,7 @@ function webapp2ContinuityDocument() {
 
                         res.setHeader(
                             'Cache-Control',
-                            'no-store'
+                            'no-store, no-cache, must-revalidate'
                         );
 
                         res.end(content);
@@ -68,15 +77,4 @@ function webapp2ContinuityDocument() {
     };
 }
 
-export default defineConfig({
-    plugins: [
-        webapp2ContinuityDocument(),
-        react()
-    ],
-    server: {
-        allowedHosts: [
-            'albums-dollars-veterinary-revisions.trycloudflare.com'
-        ]
-    }
-
-});
+export default defineConfig({plugins:[webapp2ExternalContinuityServer(), react()]});

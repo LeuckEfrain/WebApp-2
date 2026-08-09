@@ -1,0 +1,292 @@
+const CONTINUITY_ENDPOINT =
+    '/__webapp2_continuity__';
+
+
+const SECTION_DEFINITIONS = [
+    {
+        id: 'vision',
+        title: 'Project Vision',
+        aliases: [
+            'PROJECT VISION',
+            'VISION'
+        ]
+    },
+    {
+        id: 'protocols',
+        title: 'Protocols',
+        aliases: [
+            'PROTOCOLS',
+            'DEVELOPMENT PROTOCOLS'
+        ]
+    },
+    {
+        id: 'goals',
+        title: 'Goals',
+        aliases: [
+            'ACTIVE / INCOMPLETE GOALS',
+            'ACTIVE/INCOMPLETE GOALS',
+            'GOALS'
+        ]
+    },
+    {
+        id: 'architecture',
+        title: 'Architecture',
+        aliases: [
+            'INSTANCE-LOCAL MODULE ARCHITECTURE',
+            'INSTANCE LOCAL MODULE ARCHITECTURE',
+            'ARCHITECTURE'
+        ]
+    },
+    {
+        id: 'phases',
+        title: 'Development Phases',
+        aliases: [
+            'PHASE ROADMAP',
+            'DEVELOPMENT PHASES',
+            'PHASES'
+        ]
+    }
+];
+
+
+function normalize(value) {
+    return value
+        .trim()
+        .replace(/^#{1,6}\s*/, '')
+        .replace(/\s+/g, ' ')
+        .toUpperCase();
+}
+
+
+function isDelimiter(line) {
+    return (
+        !line ||
+        /^={3,}$/.test(line) ||
+        /^-{3,}$/.test(line)
+    );
+}
+
+
+function isHeading(line) {
+    const value = line.trim();
+
+    if (!value || isDelimiter(value)) {
+        return false;
+    }
+
+    if (/^#{1,6}\s+/.test(value)) {
+        return true;
+    }
+
+    return (
+        value === value.toUpperCase() &&
+        /[A-Z]/.test(value)
+    );
+}
+
+
+function cleanHeading(line) {
+    return line
+        .trim()
+        .replace(/^#{1,6}\s*/, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+
+function parseDocument(text) {
+    const lines = text
+        .replace(/\r\n/g, '\n')
+        .split('\n');
+
+    const sections = [];
+
+    let current = null;
+
+    for (const rawLine of lines) {
+        const line = rawLine.trim();
+
+        const sectionMatch = line.match(
+            /^\[SECTION:\s*(.+?)\s*\]$/
+        );
+
+        if (sectionMatch) {
+            const title = sectionMatch[1].trim();
+
+            current = {
+                title,
+                normalizedTitle: normalize(title),
+                lines: []
+            };
+
+            sections.push(current);
+            continue;
+        }
+
+        if (/^\[END_SECTION\]$/.test(line)) {
+            current = null;
+            continue;
+        }
+
+        // Ignore document-level content before the first structured section.
+        if (!current) {
+            continue;
+        }
+
+        // The structured continuity document contains a TITLE line
+        // immediately inside each section. The section marker already
+        // supplies the canonical title, so do not duplicate that line.
+        if (
+            current.lines.length === 0 &&
+            /^TITLE:\s*/i.test(line)
+        ) {
+            continue;
+        }
+
+        // Ignore empty lines while preserving actual section content.
+        if (line) {
+            current.lines.push(line);
+        }
+    }
+
+    return sections;
+}
+
+function findSection(sections, definition) {
+    const accepted = [
+        definition.title,
+        ...definition.aliases
+    ].map(normalize);
+
+    return sections.find(section =>
+        accepted.includes(section.normalizedTitle)
+    );
+}
+
+
+function lineToItem(line, index) {
+    const cleaned = line
+        .replace(/^[-*•]\s*/, '')
+        .replace(/^\d+[.)]\s*/, '')
+        .trim();
+
+    const separatorIndex = cleaned.indexOf(':');
+
+    if (
+        separatorIndex > 0 &&
+        separatorIndex < 80
+    ) {
+        const title = cleaned
+            .slice(0, separatorIndex)
+            .trim();
+
+        const body = cleaned
+            .slice(separatorIndex + 1)
+            .trim();
+
+        if (title && body) {
+            return {
+                title,
+                body
+            };
+        }
+    }
+
+    return {
+        title: `Item ${index + 1}`,
+        body: cleaned
+    };
+}
+
+
+function buildGoalItems(lines) {
+    return lines.map((line, index) =>
+        lineToItem(line, index)
+    );
+}
+
+
+function buildSection(documentSection, definition) {
+    if (!documentSection) {
+        return {
+            id: definition.id,
+            title: definition.title,
+            description:
+                'This section is not currently present in the authoritative continuity document.',
+            content: [],
+            items: [],
+            goals: [],
+            phases: []
+        };
+    }
+
+    const content = [...documentSection.lines];
+
+    const result = {
+        id: definition.id,
+        title: definition.title,
+        description:
+            'Loaded dynamically from the authoritative continuity document.',
+        content,
+        items: [],
+        goals: [],
+        phases: []
+    };
+
+    if (definition.id === 'goals') {
+        result.goals = buildGoalItems(content).map(
+            (item, index) => ({
+                id: `${definition.id}-${index}`,
+                title: item.title,
+                status: 'Current',
+                body: item.body,
+                phases: []
+            })
+        );
+    } else if (definition.id === 'phases') {
+        result.phases = content.map((line, index) => ({
+            title: `Phase ${index + 1}`,
+            status: 'Current',
+            body: line
+        }));
+    } else {
+        result.items = buildGoalItems(content);
+    }
+
+    return result;
+}
+
+
+function buildViewerSections(text) {
+    const sections = parseDocument(text);
+
+    return SECTION_DEFINITIONS.map(definition =>
+        buildSection(
+            findSection(sections, definition),
+            definition
+        )
+    );
+}
+
+
+export async function loadContinuitySections() {
+    const response = await fetch(
+        CONTINUITY_ENDPOINT,
+        {
+            cache: 'no-store'
+        }
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            `Continuity endpoint returned HTTP ${response.status}.`
+        );
+    }
+
+    const text = await response.text();
+
+    return {
+        text,
+        sections: buildViewerSections(text)
+    };
+}
