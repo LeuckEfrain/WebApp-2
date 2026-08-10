@@ -75,7 +75,8 @@ export default defineConfig({
     ],
     server: {
         allowedHosts: [
-            'albums-dollars-veterinary-revisions.trycloudflare.com'
+            'albums-dollars-veterinary-revisions.trycloudflare.com',
+            'mounts-gathering-violations-themselves.trycloudflare.com'
         ]
     }
 
