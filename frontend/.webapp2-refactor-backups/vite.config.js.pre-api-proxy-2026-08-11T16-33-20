@@ -76,25 +76,7 @@ export default defineConfig({
     server: {
         allowedHosts: [
             '.trycloudflare.com'
-        ],
-        // WEBAPP2_API_PROXY_START
-
-        /*
-         * Forward externally exposed /api requests to FastAPI.
-         *
-         * Cloudflare -> Vite -> FastAPI
-         *
-         * The existing allowedHosts configuration is intentionally
-         * preserved exactly as-is.
-         */
-        proxy: {
-            '/api': {
-                target: 'http://localhost:8000',
-                changeOrigin: true
-            }
-        },
-
-        // WEBAPP2_API_PROXY_END
+        ]
     }
 
 });

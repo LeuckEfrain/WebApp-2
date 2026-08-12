@@ -28,16 +28,3 @@ def search(manager: str, q: str = ""): return module.search(manager, q)
 @app.post("/api/package-managers/download")
 def download_packages(request: DownloadRequest):
     return module.download_packages(request.packages)
-
-
-# --- WEBAPP2 PROJECT ACCESS TEST START ---
-
-@app.get("/api/project/test")
-def project_access_test():
-    return {
-        "status": "ok",
-        "source": "WebApp-2",
-    }
-
-# --- WEBAPP2 PROJECT ACCESS TEST END ---
-
