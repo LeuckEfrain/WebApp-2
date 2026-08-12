@@ -30,14 +30,141 @@ def download_packages(request: DownloadRequest):
     return module.download_packages(request.packages)
 
 
-# --- WEBAPP2 PROJECT ACCESS TEST START ---
+# --- WEBAPP2 PROJECT ACCESS START ---
 
-@app.get("/api/project/test")
-def project_access_test():
-    return {
-        "status": "ok",
-        "source": "WebApp-2",
-    }
+@app.get("/api/project/tree")
+def project_tree(
+    ref: str = "tests",
+    recursive: bool = True,
+):
+    import json
+    import urllib.error
+    import urllib.parse
+    import urllib.request
 
-# --- WEBAPP2 PROJECT ACCESS TEST END ---
+    if ref not in {"tests", "main"}:
+        return {
+            "error": "Unsupported repository ref.",
+            "allowed_refs": ["main", "tests"],
+        }
+
+    url = (
+        "https://api.github.com/repos/"
+        "LeuckEfrain/WebApp-2/git/trees/"
+        + urllib.parse.quote(ref, safe="")
+    )
+
+    if recursive:
+        url += "?recursive=1"
+
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "WebApp-2-project-access",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=15,
+        ) as response:
+            return json.loads(
+                response.read().decode("utf-8")
+            )
+
+    except urllib.error.HTTPError as error:
+        try:
+            body = error.read().decode("utf-8")
+            github_error = json.loads(body)
+        except Exception:
+            github_error = {
+                "message": str(error)
+            }
+
+        return {
+            "error": "GitHub tree request failed.",
+            "status": error.code,
+            "github": github_error,
+        }
+
+    except Exception as error:
+        return {
+            "error": "Unable to retrieve project tree.",
+            "detail": str(error),
+        }
+
+
+@app.get("/api/project/contents")
+def project_contents(
+    path: str = "",
+    ref: str = "tests",
+):
+    import json
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    if ref not in {"tests", "main"}:
+        return {
+            "error": "Unsupported repository ref.",
+            "allowed_refs": ["main", "tests"],
+        }
+
+    clean_path = path.strip("/")
+
+    encoded_path = urllib.parse.quote(
+        clean_path,
+        safe="/",
+    )
+
+    url = (
+        "https://api.github.com/repos/"
+        "LeuckEfrain/WebApp-2/contents/"
+        + encoded_path
+        + "?ref="
+        + urllib.parse.quote(ref, safe="")
+    )
+
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "WebApp-2-project-access",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=15,
+        ) as response:
+            return json.loads(
+                response.read().decode("utf-8")
+            )
+
+    except urllib.error.HTTPError as error:
+        try:
+            body = error.read().decode("utf-8")
+            github_error = json.loads(body)
+        except Exception:
+            github_error = {
+                "message": str(error)
+            }
+
+        return {
+            "error": "GitHub contents request failed.",
+            "status": error.code,
+            "github": github_error,
+        }
+
+    except Exception as error:
+        return {
+            "error": "Unable to retrieve project contents.",
+            "detail": str(error),
+        }
+
+
+# --- WEBAPP2 PROJECT ACCESS END ---
 

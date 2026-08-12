@@ -1,0 +1,43 @@
+from fastapi import FastAPI
+from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+from backend.modules.package_manager import PackageManagerModule
+
+class DownloadRequest(BaseModel):
+    packages: list[dict]
+
+app = FastAPI(title="Modular Web App", version="0.3.0")
+app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+module = PackageManagerModule()
+
+@app.get("/api/health")
+def health(): return {"status":"ok"}
+@app.get("/api/package-managers")
+def package_managers(): return module.managers()
+@app.get("/api/software")
+def software(): return module.installed_software()
+@app.get("/api/download/destination")
+def download_destination():
+    destination = module.get_download_directory()
+
+    return {
+        "destination": destination
+    }
+@app.get("/api/package-managers/{manager}/search")
+def search(manager: str, q: str = ""): return module.search(manager, q)
+@app.post("/api/package-managers/download")
+def download_packages(request: DownloadRequest):
+    return module.download_packages(request.packages)
+
+
+# --- WEBAPP2 PROJECT ACCESS TEST START ---
+
+@app.get("/api/project/test")
+def project_access_test():
+    return {
+        "status": "ok",
+        "source": "WebApp-2",
+    }
+
+# --- WEBAPP2 PROJECT ACCESS TEST END ---
+

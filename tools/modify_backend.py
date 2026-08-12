@@ -1,28 +1,26 @@
 #!/usr/bin/env python3
+# real-time testing
 
 """
 tools/modify_backend.py
 
-Installs the temporary external-access test endpoint for WebApp-2.
+Replaces the temporary external-access test endpoint with the
+GitHub-backed project access gateway for WebApp-2.
 
-This follows the same safety pattern as modify_frontend.py:
-- validate the expected source state
-- construct the modification
-- validate the resulting source
-- create a backup
-- write the file
-- report the modification
+The gateway exposes GitHub's existing API through the local backend,
+allowing an external client to inspect the project without requiring
+the user to manually provide project files.
 
-Temporary endpoint:
+Endpoints installed:
 
-    GET /api/project/test
+    GET /api/project/tree
+    GET /api/project/contents
 
-Expected response:
+Examples:
 
-    {
-        "status": "ok",
-        "source": "WebApp-2"
-    }
+    /api/project/tree?ref=tests
+
+    /api/project/contents?path=backend/main.py&ref=tests
 """
 
 from pathlib import Path
@@ -44,32 +42,170 @@ BACKUP_DIR = (
     / ".webapp2-refactor-backups"
 )
 
+
 MARKER_START = (
-    "# --- WEBAPP2 PROJECT ACCESS TEST START ---"
+    "# --- WEBAPP2 PROJECT ACCESS START ---"
 )
 
 MARKER_END = (
+    "# --- WEBAPP2 PROJECT ACCESS END ---"
+)
+
+
+TEST_MARKER_START = (
+    "# --- WEBAPP2 PROJECT ACCESS TEST START ---"
+)
+
+TEST_MARKER_END = (
     "# --- WEBAPP2 PROJECT ACCESS TEST END ---"
 )
 
 
-TEST_BLOCK = r'''
-# --- WEBAPP2 PROJECT ACCESS TEST START ---
+GITHUB_GATEWAY_BLOCK = r'''
+# --- WEBAPP2 PROJECT ACCESS START ---
 
-@app.get("/api/project/test")
-def project_access_test():
-    return {
-        "status": "ok",
-        "source": "WebApp-2",
-    }
+@app.get("/api/project/tree")
+def project_tree(
+    ref: str = "tests",
+    recursive: bool = True,
+):
+    import json
+    import urllib.error
+    import urllib.parse
+    import urllib.request
 
-# --- WEBAPP2 PROJECT ACCESS TEST END ---
+    if ref not in {"tests", "main"}:
+        return {
+            "error": "Unsupported repository ref.",
+            "allowed_refs": ["main", "tests"],
+        }
+
+    url = (
+        "https://api.github.com/repos/"
+        "LeuckEfrain/WebApp-2/git/trees/"
+        + urllib.parse.quote(ref, safe="")
+    )
+
+    if recursive:
+        url += "?recursive=1"
+
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "WebApp-2-project-access",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=15,
+        ) as response:
+            return json.loads(
+                response.read().decode("utf-8")
+            )
+
+    except urllib.error.HTTPError as error:
+        try:
+            body = error.read().decode("utf-8")
+            github_error = json.loads(body)
+        except Exception:
+            github_error = {
+                "message": str(error)
+            }
+
+        return {
+            "error": "GitHub tree request failed.",
+            "status": error.code,
+            "github": github_error,
+        }
+
+    except Exception as error:
+        return {
+            "error": "Unable to retrieve project tree.",
+            "detail": str(error),
+        }
+
+
+@app.get("/api/project/contents")
+def project_contents(
+    path: str = "",
+    ref: str = "tests",
+):
+    import json
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    if ref not in {"tests", "main"}:
+        return {
+            "error": "Unsupported repository ref.",
+            "allowed_refs": ["main", "tests"],
+        }
+
+    clean_path = path.strip("/")
+
+    encoded_path = urllib.parse.quote(
+        clean_path,
+        safe="/",
+    )
+
+    url = (
+        "https://api.github.com/repos/"
+        "LeuckEfrain/WebApp-2/contents/"
+        + encoded_path
+        + "?ref="
+        + urllib.parse.quote(ref, safe="")
+    )
+
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "WebApp-2-project-access",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=15,
+        ) as response:
+            return json.loads(
+                response.read().decode("utf-8")
+            )
+
+    except urllib.error.HTTPError as error:
+        try:
+            body = error.read().decode("utf-8")
+            github_error = json.loads(body)
+        except Exception:
+            github_error = {
+                "message": str(error)
+            }
+
+        return {
+            "error": "GitHub contents request failed.",
+            "status": error.code,
+            "github": github_error,
+        }
+
+    except Exception as error:
+        return {
+            "error": "Unable to retrieve project contents.",
+            "detail": str(error),
+        }
+
+
+# --- WEBAPP2 PROJECT ACCESS END ---
 '''
 
 
 def fail(message):
     raise SystemExit(
-        f"ERROR: {message}"
+        f"ERROR: {message}\n\n"
+        "No changes were made."
     )
 
 
@@ -79,7 +215,7 @@ def fail(message):
 
 if not BACKEND_PATH.is_file():
     fail(
-        f"Backend entry point was not found: "
+        "Backend entry point was not found:\n"
         f"{BACKEND_PATH}"
     )
 
@@ -95,67 +231,81 @@ source = BACKEND_PATH.read_text(
 
 if source.count(MARKER_START) > 1:
     fail(
-        "Multiple project-access test blocks "
-        "were found.\n\n"
-        "No changes were made."
+        "Multiple project-access blocks were found."
     )
 
 
 if source.count(MARKER_END) > 1:
     fail(
-        "Multiple project-access test endings "
-        "were found.\n\n"
-        "No changes were made."
+        "Multiple project-access endings were found."
     )
 
 
 if MARKER_START in source or MARKER_END in source:
     fail(
-        "A project-access test block already exists "
-        "or is incomplete.\n\n"
-        "No changes were made."
+        "A project-access block already exists or is incomplete."
     )
 
 
 if "from fastapi import FastAPI" not in source:
     fail(
-        "Expected FastAPI import was not found.\n\n"
-        "No changes were made."
+        "Expected FastAPI import was not found."
     )
 
 
 if "app = FastAPI(" not in source:
     fail(
-        "FastAPI application initialization was not found.\n\n"
-        "No changes were made."
+        "FastAPI application initialization was not found."
     )
 
 
 if '@app.get("/api/health")' not in source:
     fail(
-        "Expected existing /api/health endpoint "
-        "was not found.\n\n"
-        "No changes were made."
+        "Expected existing /api/health endpoint was not found."
     )
 
 
-if '@app.get("/api/project/test")' in source:
+TEST_ROUTE = '@app.get("/api/project/test")'
+
+if TEST_ROUTE not in source:
     fail(
-        "Project-access test endpoint already exists "
-        "outside the managed block.\n\n"
-        "No changes were made."
+        "Expected temporary project-access test endpoint "
+        "was not found."
+    )
+
+
+if source.count(TEST_MARKER_START) != 1:
+    fail(
+        "Expected exactly one temporary project-access "
+        "test block."
+    )
+
+
+if source.count(TEST_MARKER_END) != 1:
+    fail(
+        "Expected exactly one temporary project-access "
+        "test block ending."
     )
 
 
 # ---------------------------------------------------------------------------
-# Construct modification
+# Remove temporary test block
 # ---------------------------------------------------------------------------
+
+test_start = source.index(TEST_MARKER_START)
+
+test_end = source.index(
+    TEST_MARKER_END,
+    test_start,
+)
+
+test_end += len(TEST_MARKER_END)
+
 
 modified = (
-    source.rstrip()
-    + "\n\n"
-    + TEST_BLOCK
-    + "\n"
+    source[:test_start]
+    + GITHUB_GATEWAY_BLOCK.strip()
+    + source[test_end:]
 )
 
 
@@ -165,34 +315,71 @@ modified = (
 
 if modified.count(MARKER_START) != 1:
     fail(
-        "Generated project-access test block "
-        "was not created correctly.\n\n"
-        "No changes were made."
+        "Generated project-access block was not created correctly."
     )
 
 
 if modified.count(MARKER_END) != 1:
     fail(
-        "Generated project-access test ending "
-        "was not created correctly.\n\n"
-        "No changes were made."
+        "Generated project-access ending was not created correctly."
     )
 
 
 if modified.count(
-    '@app.get("/api/project/test")'
+    '@app.get("/api/project/tree")'
 ) != 1:
     fail(
-        "Expected exactly one project-access "
-        "test endpoint.\n\n"
-        "No changes were made."
+        "GitHub tree endpoint was not generated correctly."
     )
 
 
-if "source" not in modified:
+if modified.count(
+    '@app.get("/api/project/contents")'
+) != 1:
     fail(
-        "Test response was not generated correctly.\n\n"
-        "No changes were made."
+        "GitHub contents endpoint was not generated correctly."
+    )
+
+
+if TEST_ROUTE in modified:
+    fail(
+        "Temporary project-access test endpoint still exists."
+    )
+
+
+# Validate GitHub tree target by source components.
+if (
+    "https://api.github.com/repos/"
+    not in modified
+    or "LeuckEfrain/WebApp-2/git/trees/"
+    not in modified
+):
+    fail(
+        "GitHub tree API target was not generated."
+    )
+
+
+# Validate GitHub contents target by source components.
+if (
+    "https://api.github.com/repos/"
+    not in modified
+    or "LeuckEfrain/WebApp-2/contents/"
+    not in modified
+):
+    fail(
+        "GitHub contents API target was not generated."
+    )
+
+
+if "application/vnd.github+json" not in modified:
+    fail(
+        "GitHub API media type was not generated."
+    )
+
+
+if "urllib.parse.quote" not in modified:
+    fail(
+        "URL encoding support was not generated."
     )
 
 
@@ -202,7 +389,7 @@ if "source" not in modified:
 
 BACKUP_DIR.mkdir(
     parents=True,
-    exist_ok=True
+    exist_ok=True,
 )
 
 
@@ -216,7 +403,7 @@ timestamp = (
 backup_path = (
     BACKUP_DIR
     / (
-        "main.py.pre-project-access-test-"
+        "main.py.pre-project-github-access-"
         f"{timestamp}"
     )
 )
@@ -224,7 +411,7 @@ backup_path = (
 
 shutil.copy2(
     BACKEND_PATH,
-    backup_path
+    backup_path,
 )
 
 
@@ -234,7 +421,7 @@ shutil.copy2(
 
 BACKEND_PATH.write_text(
     modified,
-    encoding="utf-8"
+    encoding="utf-8",
 )
 
 
@@ -249,30 +436,69 @@ written = BACKEND_PATH.read_text(
 
 if written.count(MARKER_START) != 1:
     fail(
-        "Post-write validation failed.\n"
+        "Post-write project-access marker validation failed.\n"
         f"Restore from backup: {backup_path}"
     )
 
 
 if written.count(MARKER_END) != 1:
     fail(
-        "Post-write validation failed.\n"
+        "Post-write project-access ending validation failed.\n"
+        f"Restore from backup: {backup_path}"
+    )
+
+
+if TEST_ROUTE in written:
+    fail(
+        "Temporary test endpoint remains after write.\n"
         f"Restore from backup: {backup_path}"
     )
 
 
 if written.count(
-    '@app.get("/api/project/test")'
+    '@app.get("/api/project/tree")'
 ) != 1:
     fail(
-        "Post-write endpoint validation failed.\n"
+        "Post-write tree endpoint validation failed.\n"
+        f"Restore from backup: {backup_path}"
+    )
+
+
+if written.count(
+    '@app.get("/api/project/contents")'
+) != 1:
+    fail(
+        "Post-write contents endpoint validation failed.\n"
+        f"Restore from backup: {backup_path}"
+    )
+
+
+if (
+    "https://api.github.com/repos/"
+    not in written
+    or "LeuckEfrain/WebApp-2/git/trees/"
+    not in written
+):
+    fail(
+        "Post-write GitHub tree target validation failed.\n"
+        f"Restore from backup: {backup_path}"
+    )
+
+
+if (
+    "https://api.github.com/repos/"
+    not in written
+    or "LeuckEfrain/WebApp-2/contents/"
+    not in written
+):
+    fail(
+        "Post-write GitHub contents target validation failed.\n"
         f"Restore from backup: {backup_path}"
     )
 
 
 print(
-    "Project access test endpoint "
-    "installed successfully."
+    "GitHub project access gateway installed successfully."
 )
 
 print(
@@ -284,5 +510,25 @@ print(
 )
 
 print(
-    "Endpoint: /api/project/test"
+    "Endpoints:"
+)
+
+print(
+    "  /api/project/tree"
+)
+
+print(
+    "  /api/project/contents"
+)
+
+print(
+    "Source: GitHub API"
+)
+
+print(
+    "Repository: LeuckEfrain/WebApp-2"
+)
+
+print(
+    "Default ref: tests"
 )
