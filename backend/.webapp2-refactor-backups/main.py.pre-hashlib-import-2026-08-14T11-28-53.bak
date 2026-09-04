@@ -1,18 +1,15 @@
 from pathlib import Path
 from fastapi import FastAPI, Request, Request
-from backend.modules.agent_discovery import router as agent_discovery_router
 from fastapi.responses import JSONResponse
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from backend.modules.package_manager import PackageManagerModule
-import hashlib
 
 class DownloadRequest(BaseModel):
     packages: list[dict]
 
 app = FastAPI(title="Modular Web App", version="0.3.0")
-app.include_router(agent_discovery_router)
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 module = PackageManagerModule()
 
@@ -1582,28 +1579,6 @@ def agent_discovery_continuity():
         }
     )
 
-
-# ============================================================================
-# WEBAPP-2 READ-ONLY UPDATER DISCOVERY
-# ============================================================================
-#
-# Exposes the authoritative continuity updater for inspection.
-#
-# This endpoint:
-#
-#   - reads webapp2_update.py
-#   - does not execute it
-#   - does not write to it
-#   - does not execute commands
-#
-# ============================================================================
-
-@app.get("/api/agent/discovery/updater")
-def discovery_webapp2_updater():
-
-    return _read_webapp2_updater()
-
-
 def agent_discovery(request: str = "index"):
 
     _webapp2_discovery_request = (
@@ -2138,50 +2113,3 @@ def agent_discovery_git():
 # --- WEBAPP2 LOCAL DISCOVERY END ---
 
 # --- WEBAPP2 PROJECT ACCESS END ---
-
-# WEBAPP-2 DISCOVERY: AUTHORITATIVE UPDATER
-
-
-# ============================================================================
-# WEBAPP-2 READ-ONLY CONTINUITY UPDATER DISCOVERY
-# ============================================================================
-#
-# This endpoint exposes the authoritative continuity updater as read-only
-# inspection data.
-#
-# It does NOT execute the updater.
-# It does NOT permit writes.
-# It does NOT execute commands.
-#
-# ============================================================================
-
-WEBAPP2_UPDATER_PATH = (
-    Path(r"D:\Projects\WebApps\continuity\webapp_2\webapp2_update.py")
-)
-
-
-def _read_webapp2_updater():
-
-    if not WEBAPP2_UPDATER_PATH.is_file():
-
-        raise FileNotFoundError(
-            "webapp2_update.py was not found at the authoritative path."
-        )
-
-    content = WEBAPP2_UPDATER_PATH.read_text(
-        encoding="utf-8"
-    )
-
-    return {
-        "ok": True,
-        "source": "authoritative_webapp2_updater",
-        "path": str(WEBAPP2_UPDATER_PATH),
-        "name": WEBAPP2_UPDATER_PATH.name,
-        "size": len(content.encode("utf-8")),
-        "content": content,
-        "read_only": True,
-        "execution_enabled": False,
-        "write_enabled": False,
-    }
-
-

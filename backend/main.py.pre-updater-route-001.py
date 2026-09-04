@@ -1,6 +1,5 @@
 from pathlib import Path
 from fastapi import FastAPI, Request, Request
-from backend.modules.agent_discovery import router as agent_discovery_router
 from fastapi.responses import JSONResponse
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -12,7 +11,6 @@ class DownloadRequest(BaseModel):
     packages: list[dict]
 
 app = FastAPI(title="Modular Web App", version="0.3.0")
-app.include_router(agent_discovery_router)
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 module = PackageManagerModule()
 
@@ -1581,28 +1579,6 @@ def agent_discovery_continuity():
             "content": content,
         }
     )
-
-
-# ============================================================================
-# WEBAPP-2 READ-ONLY UPDATER DISCOVERY
-# ============================================================================
-#
-# Exposes the authoritative continuity updater for inspection.
-#
-# This endpoint:
-#
-#   - reads webapp2_update.py
-#   - does not execute it
-#   - does not write to it
-#   - does not execute commands
-#
-# ============================================================================
-
-@app.get("/api/agent/discovery/updater")
-def discovery_webapp2_updater():
-
-    return _read_webapp2_updater()
-
 
 def agent_discovery(request: str = "index"):
 

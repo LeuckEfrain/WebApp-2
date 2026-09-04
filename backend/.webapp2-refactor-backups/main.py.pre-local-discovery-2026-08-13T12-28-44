@@ -1,0 +1,656 @@
+from fastapi import FastAPI, Request, Request
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+from backend.modules.package_manager import PackageManagerModule
+
+class DownloadRequest(BaseModel):
+    packages: list[dict]
+
+app = FastAPI(title="Modular Web App", version="0.3.0")
+app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+module = PackageManagerModule()
+
+@app.get("/api/health")
+def health(): return {"status":"ok"}
+@app.get("/api/package-managers")
+def package_managers(): return module.managers()
+@app.get("/api/software")
+def software(): return module.installed_software()
+@app.get("/api/download/destination")
+def download_destination():
+    destination = module.get_download_directory()
+
+    return {
+        "destination": destination
+    }
+@app.get("/api/package-managers/{manager}/search")
+def search(manager: str, q: str = ""): return module.search(manager, q)
+@app.post("/api/package-managers/download")
+def download_packages(request: DownloadRequest):
+    return module.download_packages(request.packages)
+
+
+# --- WEBAPP2 PROJECT ACCESS START ---
+
+# --- WEBAPP2 DISCOVERY START ---
+
+@app.get("/api/discovery")
+def project_discovery():
+    """
+    Temporary relative-URL discovery capability test.
+
+    The returned resources intentionally use relative URLs.
+
+    These must NOT be converted to absolute URLs here. The purpose
+    of this endpoint is to determine whether a client can resolve
+    discovered resources against the URL from which this response
+    was obtained.
+    """
+
+    return {
+        "name": "WebApp-2 Project Access Discovery",
+        "version": "2",
+        "test": "relative-url-resolution",
+        "repository": "LeuckEfrain/WebApp-2",
+        "default_ref": "tests",
+        "resources": {
+            "tree": "/api/project/tree?ref=tests",
+            "contents": (
+                "/api/project/contents"
+                "?path=backend%2Fmain.py&ref=tests"
+            ),
+        },
+    }
+
+# --- WEBAPP2 DISCOVERY END ---
+
+@app.get("/api/project/tree")
+def project_tree(
+    ref: str = "tests",
+    recursive: bool = True,
+):
+    import json
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    if ref not in {"tests", "main"}:
+        return {
+            "error": "Unsupported repository ref.",
+            "allowed_refs": ["main", "tests"],
+        }
+
+    url = (
+        "https://api.github.com/repos/"
+        "LeuckEfrain/WebApp-2/git/trees/"
+        + urllib.parse.quote(ref, safe="")
+    )
+
+    if recursive:
+        url += "?recursive=1"
+
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "WebApp-2-project-access",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=15,
+        ) as response:
+            return json.loads(
+                response.read().decode("utf-8")
+            )
+
+    except urllib.error.HTTPError as error:
+        try:
+            body = error.read().decode("utf-8")
+            github_error = json.loads(body)
+        except Exception:
+            github_error = {
+                "message": str(error)
+            }
+
+        return {
+            "error": "GitHub tree request failed.",
+            "status": error.code,
+            "github": github_error,
+        }
+
+    except Exception as error:
+        return {
+            "error": "Unable to retrieve project tree.",
+            "detail": str(error),
+        }
+
+
+@app.get("/api/project/contents")
+def project_contents(
+    path: str = "",
+    ref: str = "tests",
+):
+    import json
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    if ref not in {"tests", "main"}:
+        return {
+            "error": "Unsupported repository ref.",
+            "allowed_refs": ["main", "tests"],
+        }
+
+    clean_path = path.strip("/")
+
+    encoded_path = urllib.parse.quote(
+        clean_path,
+        safe="/",
+    )
+
+    url = (
+        "https://api.github.com/repos/"
+        "LeuckEfrain/WebApp-2/contents/"
+        + encoded_path
+        + "?ref="
+        + urllib.parse.quote(ref, safe="")
+    )
+
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "WebApp-2-project-access",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=15,
+        ) as response:
+            return json.loads(
+                response.read().decode("utf-8")
+            )
+
+    except urllib.error.HTTPError as error:
+        try:
+            body = error.read().decode("utf-8")
+            github_error = json.loads(body)
+        except Exception:
+            github_error = {
+                "message": str(error)
+            }
+
+        return {
+            "error": "GitHub contents request failed.",
+            "status": error.code,
+            "github": github_error,
+        }
+
+    except Exception as error:
+        return {
+            "error": "Unable to retrieve project contents.",
+            "detail": str(error),
+        }
+
+
+
+# --- WEBAPP2 HTML DISCOVERY TEST START ---
+
+@app.get(
+    "/api/discovery/html",
+    response_class=HTMLResponse,
+)
+def project_discovery_html():
+    """
+    Temporary HTML hyperlink discovery capability test.
+
+    The links are intentionally relative.
+    """
+
+    return """
+<!doctype html>
+<html>
+<head>
+    <title>WebApp-2 Project Access Discovery</title>
+</head>
+<body>
+    <h1>WebApp-2 Project Access Discovery</h1>
+
+    <p>
+        HTML hyperlink discovery capability test.
+    </p>
+
+    <ul>
+        <li>
+            <a href="/api/project/tree?ref=tests">
+                Project Tree
+            </a>
+        </li>
+
+        <li>
+            <a href="/api/project/contents?path=backend%2Fmain.py&amp;ref=tests">
+                backend/main.py
+            </a>
+        </li>
+    </ul>
+</body>
+</html>
+"""
+
+# --- WEBAPP2 HTML DISCOVERY TEST END ---
+
+
+
+# --- WEBAPP2 PROJECT NAVIGATION START ---
+
+@app.get(
+    "/api/project/navigation",
+    response_class=HTMLResponse,
+)
+def project_navigation(
+    path: str = "",
+    ref: str = "tests",
+):
+    """
+    Dynamic HTML navigation interface for the GitHub repository.
+
+    Directories become links to another navigation page.
+
+    Files become links to the existing JSON contents endpoint.
+
+    The structure is retrieved from GitHub at request time, so this
+    endpoint does not maintain a hard-coded project tree.
+    """
+
+    import html
+    import json
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    if ref not in {"tests", "main"}:
+        return HTMLResponse(
+            content="""
+<!doctype html>
+<html>
+<head>
+    <title>WebApp-2 Project Navigation</title>
+</head>
+<body>
+    <h1>Unsupported repository ref</h1>
+    <p>Allowed refs: main, tests</p>
+</body>
+</html>
+""",
+            status_code=400,
+        )
+
+    clean_path = path.strip("/")
+
+    encoded_path = urllib.parse.quote(
+        clean_path,
+        safe="/",
+    )
+
+    github_url = (
+        "https://api.github.com/repos/"
+        "LeuckEfrain/WebApp-2/contents/"
+        + encoded_path
+        + "?ref="
+        + urllib.parse.quote(ref, safe="")
+    )
+
+    request = urllib.request.Request(
+        github_url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "WebApp-2-project-navigation",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=15,
+        ) as response:
+            payload = json.loads(
+                response.read().decode("utf-8")
+            )
+
+    except urllib.error.HTTPError as error:
+
+        try:
+            body = error.read().decode("utf-8")
+            github_error = json.loads(body)
+        except Exception:
+            github_error = {
+                "message": str(error)
+            }
+
+        message = html.escape(
+            str(
+                github_error.get(
+                    "message",
+                    "GitHub request failed.",
+                )
+            )
+        )
+
+        return HTMLResponse(
+            content=f"""
+<!doctype html>
+<html>
+<head>
+    <title>WebApp-2 Project Navigation</title>
+</head>
+<body>
+    <h1>Project navigation error</h1>
+    <p>{message}</p>
+    <p>HTTP status: {error.code}</p>
+</body>
+</html>
+""",
+            status_code=502,
+        )
+
+    except Exception as error:
+
+        message = html.escape(
+            str(error)
+        )
+
+        return HTMLResponse(
+            content=f"""
+<!doctype html>
+<html>
+<head>
+    <title>WebApp-2 Project Navigation</title>
+</head>
+<body>
+    <h1>Project navigation error</h1>
+    <p>{message}</p>
+</body>
+</html>
+""",
+            status_code=500,
+        )
+
+    # ------------------------------------------------------------------
+    # Normalize GitHub's response.
+    #
+    # A directory returns a list.
+    # A file returns an object.
+    # ------------------------------------------------------------------
+
+    if isinstance(payload, dict):
+
+        # A file is not rendered as raw source here.
+        # Instead, expose the existing contents API as a navigable link.
+
+        file_path = payload.get(
+            "path",
+            clean_path,
+        )
+
+        encoded_file_path = urllib.parse.quote(
+            file_path,
+            safe="",
+        )
+
+        file_url = (
+            "/api/project/contents"
+            "?path="
+            + encoded_file_path
+            + "&ref="
+            + urllib.parse.quote(
+                ref,
+                safe="",
+            )
+        )
+
+        escaped_path = html.escape(
+            file_path
+        )
+
+        document = f"""
+<!doctype html>
+<html>
+<head>
+    <title>WebApp-2 Project Navigation</title>
+</head>
+<body>
+
+<h1>WebApp-2 Project Navigation</h1>
+
+<p>
+    File:
+    <strong>{escaped_path}</strong>
+</p>
+
+<p>
+    <a href="{html.escape(file_url)}">
+        Inspect file contents
+    </a>
+</p>
+
+</body>
+</html>
+"""
+
+        return HTMLResponse(
+            content=document
+        )
+
+    # ------------------------------------------------------------------
+    # Directory listing
+    # ------------------------------------------------------------------
+
+    if not isinstance(payload, list):
+        return HTMLResponse(
+            content="""
+<!doctype html>
+<html>
+<head>
+    <title>WebApp-2 Project Navigation</title>
+</head>
+<body>
+    <h1>Unexpected GitHub response</h1>
+</body>
+</html>
+""",
+            status_code=502,
+        )
+
+    escaped_path = html.escape(
+        clean_path or "/"
+    )
+
+    links = []
+
+    # Parent directory.
+
+    if clean_path:
+
+        parent_path = (
+            clean_path.rsplit(
+                "/",
+                1,
+            )[0]
+        )
+
+        parent_url = (
+            "/api/project/navigation"
+            "?path="
+            + urllib.parse.quote(
+                parent_path,
+                safe="",
+            )
+            + "&ref="
+            + urllib.parse.quote(
+                ref,
+                safe="",
+            )
+        )
+
+        links.append(
+            f"""
+<li>
+    <a href="{html.escape(parent_url)}">
+        ..
+    </a>
+</li>
+"""
+        )
+
+    # GitHub returns directories and files separately.
+
+    directories = []
+    files = []
+
+    for item in payload:
+
+        item_type = item.get(
+            "type",
+            ""
+        )
+
+        item_path = item.get(
+            "path",
+            ""
+        )
+
+        item_name = item.get(
+            "name",
+            item_path,
+        )
+
+        if item_type == "dir":
+            directories.append(
+                (
+                    item_name,
+                    item_path,
+                )
+            )
+
+        elif item_type == "file":
+            files.append(
+                (
+                    item_name,
+                    item_path,
+                )
+            )
+
+    directories.sort(
+        key=lambda value: value[0].lower()
+    )
+
+    files.sort(
+        key=lambda value: value[0].lower()
+    )
+
+    # Directory links.
+
+    for name, item_path in directories:
+
+        directory_url = (
+            "/api/project/navigation"
+            "?path="
+            + urllib.parse.quote(
+                item_path,
+                safe="",
+            )
+            + "&ref="
+            + urllib.parse.quote(
+                ref,
+                safe="",
+            )
+        )
+
+        links.append(
+            f"""
+<li>
+    <a href="{html.escape(directory_url)}">
+        {html.escape(name)}/
+    </a>
+</li>
+"""
+        )
+
+    # File links.
+
+    for name, item_path in files:
+
+        file_url = (
+            "/api/project/contents"
+            "?path="
+            + urllib.parse.quote(
+                item_path,
+                safe="",
+            )
+            + "&ref="
+            + urllib.parse.quote(
+                ref,
+                safe="",
+            )
+        )
+
+        links.append(
+            f"""
+<li>
+    <a href="{html.escape(file_url)}">
+        {html.escape(name)}
+    </a>
+</li>
+"""
+        )
+
+    document = f"""
+<!doctype html>
+<html>
+<head>
+    <title>WebApp-2 Project Navigation</title>
+</head>
+<body>
+
+<h1>WebApp-2 Project Navigation</h1>
+
+<p>
+    Repository:
+    <strong>LeuckEfrain/WebApp-2</strong>
+</p>
+
+<p>
+    Ref:
+    <strong>{html.escape(ref)}</strong>
+</p>
+
+<p>
+    Current path:
+    <strong>{escaped_path}</strong>
+</p>
+
+<p>
+    This directory is generated from the live GitHub repository.
+</p>
+
+<ul>
+    {''.join(links)}
+</ul>
+
+</body>
+</html>
+"""
+
+    return HTMLResponse(
+        content=document
+    )
+
+# --- WEBAPP2 PROJECT NAVIGATION END ---
+
+# --- WEBAPP2 PROJECT ACCESS END ---
